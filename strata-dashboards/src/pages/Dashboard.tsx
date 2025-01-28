@@ -1,12 +1,16 @@
 import { lazy, Suspense } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { useNetworkStatus } from "../hooks/useNetworkStatus";
 import { usePaymasterWallets } from "../hooks/usePaymasterWallets";
 import convertWeiToBtc from "../utils";
+
 const StatusCard = lazy(() => import("../components/StatusCard"));
 const BalanceCard = lazy(() => import("../components/BalanceCard"));
-
+const Bridge = lazy(() => import("./Bridge"));
+const Usage = lazy(() => import("./Usage"));
 
 export default function Dashboard() {
+    const { pathname } = useLocation(); // Get current URL path
     const { data, isLoading, error } = useNetworkStatus();
     const { data: wallets, isLoading: bal_isLoading, error: bal_error } = usePaymasterWallets();
 
@@ -21,61 +25,67 @@ export default function Dashboard() {
                 </a>
                 {/* Menu */}
                 <div className="menu">
-                    <a href="/" className="menu-item active">
-                        <div className="menu-icon">
-                            <span className="menu-name">Network</span>
-                        </div>
-                    </a>
-                    <a href="/bridge" className="menu-item">
-                        <div className="menu-icon">
-                            <span className="menu-name">Bridge</span>
-                        </div>
-                    </a>
-                    <a href="/usage" className="menu-item">
-                        <div className="menu-icon">
-                            <span className="menu-name">Usage</span>
-                        </div>
-                    </a>
+                    <Link to="/" className={`menu-item ${pathname === "/" ? "active" : ""}`}>Network</Link>
+                    <Link to="/bridge" className={`menu-item ${pathname === "/bridge" ? "active" : ""}`}>Bridge</Link>
+                    <Link to="/usage" className={`menu-item ${pathname === "/usage" ? "active" : ""}`}>Usage</Link>
                 </div>
             </div>
+
             <div className="content">
-                <div className="status-container">
-                    {error && <p className="error-text">Error loading data</p>}
+                {/* Network Monitor Page */}
+                {pathname === "/" && (
+                    <div className="status-container">
+                        {error && <p className="error-text">Error loading data</p>}
 
-                    <Suspense fallback={<p className="loading-text">Loading...</p>}>
-                        {isLoading ? (
-                            <p className="loading-text">Loading...</p>
-                        ) : (
-                            <div className="status-list">
-                                <StatusCard title="Batch producer status" status={data?.batch_producer ?? "Unknown"} />
-                                <StatusCard title="RPC endpoint status" status={data?.rpc_endpoint ?? "Unknown"} />
-                                <StatusCard title="Bundler endpoint status" status={data?.bundler_endpoint ?? "Unknown"} />
-                            </div>
-                        )}
-                    </Suspense>
-                </div>
-
-                {/* Updated Paymaster Wallets Section */}
-                <div className="paymaster-container">
-                    {bal_error && <p className="error-text">Error loading Paymaster Wallets</p>}
-
-                    <Suspense fallback={<p className="loading-text">Loading paymaster balances...</p>}>
-                        {bal_isLoading ? (
-                            <p className="loading-text">Loading paymaster wallets...</p>
-                        ) : wallets && wallets.deposit && wallets.validating ? (
-                            <div className="paymaster-list">
-                                <div className="paymaster-item">
-                                    <BalanceCard title="Deposit paymaster wallet" balance={convertWeiToBtc(wallets.deposit.balance)} />
+                        <Suspense fallback={<p className="loading-text">Loading...</p>}>
+                            {isLoading ? (
+                                <p className="loading-text">Loading...</p>
+                            ) : (
+                                <div className="status-list">
+                                    <StatusCard title="Batch producer status" status={data?.batch_producer ?? "Unknown"} />
+                                    <StatusCard title="RPC endpoint status" status={data?.rpc_endpoint ?? "Unknown"} />
+                                    <StatusCard title="Bundler endpoint status" status={data?.bundler_endpoint ?? "Unknown"} />
                                 </div>
-                                <div className="paymaster-item">
-                                    <BalanceCard title="Validating paymaster wallet" balance={convertWeiToBtc(wallets.validating.balance)} />
+                            )}
+                        </Suspense>
+                    </div>
+                )}
+
+                {/* Paymaster Wallets Section */}
+                {pathname === "/" && (
+                    <div className="paymaster-container">
+                        {bal_error && <p className="error-text">Error loading Paymaster Wallets</p>}
+
+                        <Suspense fallback={<p className="loading-text">Loading paymaster balances...</p>}>
+                            {bal_isLoading ? (
+                                <p className="loading-text">Loading paymaster wallets...</p>
+                            ) : wallets && wallets.deposit && wallets.validating ? (
+                                <div className="paymaster-list">
+                                    <div className="paymaster-item">
+                                        <BalanceCard title="Deposit paymaster wallet" balance={convertWeiToBtc(wallets.deposit.balance)} />
+                                    </div>
+                                    <div className="paymaster-item">
+                                        <BalanceCard title="Validating paymaster wallet" balance={convertWeiToBtc(wallets.validating.balance)} />
+                                    </div>
                                 </div>
-                            </div>
-                        ) : (
-                            <p className="error-text">No Paymaster Data Available</p>
-                        )}
-                    </Suspense>
-                </div>
+                            ) : (
+                                <p className="error-text">No Paymaster Data Available</p>
+                            )}
+                        </Suspense>
+                    </div>
+                )}
+
+                {/* Bridge Page Content */}
+                {pathname === "/bridge" && (
+                    <div className="bridge-content">
+                        <Bridge></Bridge>
+                    </div>
+                )}
+
+                {/* Usage Page Content */}
+                {pathname === "/usage" && (
+                    <Usage></Usage>
+                )}
             </div>
         </div>
     );

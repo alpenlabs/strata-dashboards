@@ -256,7 +256,8 @@ button:focus-visible {
     align-items: center;
 }
 
-.menu-icon {
+.menu-item {
+    color: var(--strata-sand-med);
     margin: 0.5rem 0;
 }
 
