@@ -150,7 +150,8 @@ button:focus-visible {
 
 
 /* Status */
-.status-list {
+.status-list,
+.paymaster-list {
     display: flex;
     flex-direction: row;
     gap: 8px;
@@ -164,7 +165,8 @@ button:focus-visible {
     width: 33%;
 }
 
-.status-title {
+.status-title,
+.title {
     /* font-weight: bold; */
     margin: 0 1rem;
     color: var(--strata-terracotta-med);
@@ -202,6 +204,49 @@ button:focus-visible {
     background-color: red;
 }
 
+/* Paymaster */
+.paymaster-container,
+.paymaster-list {
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 10px;
+}
+
+.paymaster-item {
+    margin: 0 10%;
+}
+
+.balance-card {
+    border-bottom: 1px solid grey;
+}
+
+
+.balance-card {
+    display: flex;
+    flex-direction: column;
+    /* Stack elements vertically */
+    align-items: center;
+    /* Center align text */
+    justify-content: center;
+    /* Center within the div */
+    padding: 10px;
+    text-align: center;
+    min-width: 150px;
+    /* Ensure a reasonable width */
+}
+
+.title {
+    font-weight: bold;
+    margin-bottom: 5px;
+    /* Add spacing between title and balance */
+}
+
+
+.unit {
+    font-weight: bold;
+}
 
 /* Sidebar menu */
 .menu {

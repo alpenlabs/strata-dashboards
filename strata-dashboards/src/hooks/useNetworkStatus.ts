@@ -19,6 +19,6 @@ export const useNetworkStatus = () => {
     return useQuery({
         queryKey: ["networkStatus"],
         queryFn: fetchStatus,
-        refetchInterval: 3000, // ✅ Auto-refetch every 30s
+        refetchInterval: 10000, // ✅ Auto-refetch every 30s
     });
 };

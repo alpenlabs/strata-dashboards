@@ -6,8 +6,8 @@ interface BalanceCardProps {
 const BalanceCard = ({ title, balance }: BalanceCardProps) => {
     return (
         <div className="balance-card">
-            <span className="font-semibold">{title}</span>
-            <span className="font-medium">{balance}</span>
+            <span className="title">{title}</span>
+            <span className="balance"><span className="unit">BTC</span> {balance}</span>
         </div>
     );
 };
