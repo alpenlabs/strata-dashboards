@@ -5,9 +5,9 @@ interface BalanceCardProps {
 
 const BalanceCard = ({ title, balance }: BalanceCardProps) => {
     return (
-        <div className="flex justify-between p-4 border-b border-gray-700 bg-gray-800 rounded-lg">
-            <span>{title}</span>
-            <span className="text-blue-400">{balance}</span>
+        <div className="balance-card">
+            <span className="font-semibold">{title}</span>
+            <span className="font-medium">{balance}</span>
         </div>
     );
 };

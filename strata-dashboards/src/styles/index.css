@@ -1,7 +1,230 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+:root {
+    font-family: Outfit, sans-serif;
+    line-height: 1.5;
+    font-weight: 400;
+
+    /* color-scheme: light dark; */
+    /* color: rgba(255, 255, 255, 0.87); */
+    /* background-color: #242424; */
+    background-color: var(--strata-sand-light);
+
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    --strata-terracotta-light: #DF896D;
+    --strata-terracotta-med: #BC512F;
+    --strata-terracotta-sharp: #5A2514;
+    --strata-sand-light: #FFF7ED;
+    --strata-sand-med: #FFEAC1;
+    --strata-sand-sharp: #F2CE85;
+    --strata-marengo-light: #778B91;
+    --strata-marengo-med: #526971;
+    --strata-marengo-sharp: #273F46;
+
+}
+
+
+a {
+    font-weight: 500;
+    color: var(--strata-terracotta-med);
+    text-decoration: inherit;
+}
+
+a:hover {
+    color: var(--strata-terracotta-sharp);
+}
 
 body {
-    @apply bg-gray-900 text-white;
+    margin: 0;
+    display: block;
+    place-items: center;
+    min-width: 320px;
+    min-height: 100vh;
+}
+
+main {
+    width: 100%;
+}
+
+h1 {
+    font-size: 3.2em;
+    line-height: 1.1;
+}
+
+button {
+    border-radius: 8px;
+    border: 1px solid transparent;
+    padding: 0.6em 1.2em;
+    font-size: 1em;
+    font-weight: 500;
+    /* font-family: inherit; */
+    background-color: var(--strata-sand-med);
+    cursor: pointer;
+    transition: border-color 0.25s;
+}
+
+button:hover {
+    border-color: var(--strata-terracotta-med);
+}
+
+button:focus,
+button:focus-visible {
+    outline: 4px auto var(--strata-terracotta-med);
+}
+
+@media (prefers-color-scheme: light) {
+    :root {
+        color: #213547;
+        background-color: var(--strata-sand-med);
+    }
+
+    a:hover {
+        color: #747bff;
+    }
+
+    button {
+        background-color: var(--strata-terracotta-med);
+    }
+}
+
+#root {
+    width: 100%;
+    height: auto;
+    margin: 0 auto;
+    /* padding: 2rem; */
+}
+
+/* Logo */
+.logoWrapper {
+    max-width: 80%;
+}
+
+/* Image */
+.logoSvg {
+    display: flex;
+    align-items: center;
+    /* Center image inside */
+    justify-content: center;
+    /* Optional: centers horizontally */
+    /* height: 100%; */
+    /* Takes full height */
+}
+
+.logoSvg img {
+    max-width: 80%;
+    height: auto;
+}
+
+/* Content */
+.dashboard {
+    display: flex;
+    height: 100vh;
+    width: 100%;
+}
+
+.sidebar {
+    width: 15%;
+    /* Fixed sidebar width */
+    background-color: var(--strata-terracotta-med);
+    color: var(--strata-terracotta-light);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin: 0;
+}
+
+.content {
+    flex-grow: 1;
+    /* Takes remaining space */
+    padding: 40px;
+}
+
+.dashboard-title {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: #5A2514;
+    margin: 2rem 2rem;
+}
+
+
+/* Status */
+.status-list {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+}
+
+.status-card {
+    /* display: flex; */
+    justify-content: space-between;
+    margin: 0 20px;
+    padding: 10px 10px;
+    width: 33%;
+}
+
+.status-title {
+    /* font-weight: bold; */
+    margin: 0 1rem;
+    color: var(--strata-terracotta-med);
+}
+
+.status-badge {
+    padding: 2rem 10px;
+    margin: 0.5rem auto;
+    border: 1px solid black;
+    border-radius: 10px;
+    text-align: center;
+    display: flex;
+    /* flex-direction: row; */
+}
+
+.status-wrapper {
+    width: 100%;
+    height: auto;
+}
+
+/* Online/Offline Indicator */
+.status-indicator {
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 50%;
+    margin: 0 5px;
+    display: inline-block;
+}
+
+.status-indicator.online {
+    background-color: green;
+}
+
+.status-indicator.offline {
+    background-color: red;
+}
+
+
+/* Sidebar menu */
+.menu {
+    margin-top: 50px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.menu-icon {
+    margin: 0.5rem 0;
+}
+
+.menu-name {
+    /* font-size: 1.5rem; */
+    /* font-weight: bold; */
+    color: var(--strata-sand-med);
+}
+
+
+.loading-text,
+.error-text {
+    color: var(--strata-terracotta-med);
+    font-weight: bold;
+    text-align: center;
 }

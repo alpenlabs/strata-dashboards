@@ -5,11 +5,16 @@ interface StatusCardProps {
 
 const StatusCard = ({ title, status }: StatusCardProps) => {
     return (
-        <div className="flex justify-between p-4 border-b border-gray-700 bg-gray-800 rounded-lg">
-            <span>{title}</span>
-            <span className={status === "online" ? "text-green-400" : "text-red-400"}>
-                {status}
-            </span>
+        <div className="status-card">
+            <div className="status-title">{title}</div>
+            <div className={`status-badge`}>
+                <div className="status-wrapper">
+                    <span className="status-text">
+                        {status.charAt(0).toUpperCase() + status.slice(1)}
+                    </span>
+                    <span className={`status-indicator ${status.toLowerCase()}`} />
+                </div>
+            </div>
         </div>
     );
 };
