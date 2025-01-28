@@ -1,13 +1,21 @@
 mod config;
+mod wallets;
+mod utils;
+
 use axum::{routing::get, Json, Router};
+use log::info;
 use dotenvy::dotenv;
-use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
+use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::core::client::ClientT;
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
-use tokio::{net::TcpListener, sync::Mutex, time::{interval, Duration}};
+use tokio::{net::TcpListener, time::{interval, Duration}, sync::Mutex};
+
 use tower_http::cors::{Any, CorsLayer};
 use config::Config;
+
+use crate::wallets::{ SharedWallets, fetch_balances_task, get_wallets_with_balances, init_paymaster_wallets};
+use crate::utils::create_rpc_client;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "lowercase")]
@@ -26,12 +34,6 @@ struct NetworkStatus {
 // Shared State
 type SharedState = Arc<Mutex<NetworkStatus>>;
 
-/// Creates a JSON-RPC client with a dynamic URL
-fn create_rpc_client(rpc_url: &str) -> HttpClient {
-    HttpClientBuilder::default()
-        .build(rpc_url)
-        .expect("Failed to create JSON-RPC client")
-}
 
 /// Calls `strata_syncStatus` using `jsonrpsee`
 async fn call_rpc_status(client: &HttpClient) -> Status {
@@ -39,7 +41,7 @@ async fn call_rpc_status(client: &HttpClient) -> Status {
     
     match response {
         Ok(json) => {
-            println!("🔹 RPC Response: {:?}", json);
+            info!("RPC Response: {:?}", json);
             if json.get("tip_height").is_some() {
                 Status::Online
             } else {
@@ -47,7 +49,7 @@ async fn call_rpc_status(client: &HttpClient) -> Status {
             }
         }
         Err(e) => {
-            println!("🔹 error: {}", e);
+            info!("🔹 error: {}", e);
             Status::Offline
         }
     }
@@ -66,8 +68,8 @@ async fn check_bundler_health(client: &reqwest::Client, config: &Config) -> Stat
 }
 
 /// Periodically fetches real statuses
-async fn fetch_statuses(state: SharedState, config: &Config) {
-    println!("🔹 Fetching statuses...");
+async fn fetch_statuses_task(state: SharedState, config: &Config) {
+    info!("Fetching statuses...");
     let mut interval = interval(Duration::from_secs(10));
     let rpc_client = create_rpc_client(&config.rpc_url());
     let http_client = reqwest::Client::new();
@@ -85,7 +87,7 @@ async fn fetch_statuses(state: SharedState, config: &Config) {
             bundler_endpoint,
         };
 
-        println!("✅ Updated Status: {:?}", new_status);
+        info!("Updated Status: {:?}", new_status);
 
         let mut locked_state = state.lock().await;
         *locked_state = new_status;
@@ -97,12 +99,14 @@ async fn get_network_status(state: SharedState) -> Json<NetworkStatus> {
     let data = state.lock().await.clone();
     Json(data)
 }
-
 #[tokio::main]
 async fn main() {
+    // ✅ Initialize logger with info level
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+
     dotenv().ok();
 
-    let config = config::Config::new();
+    let config = Arc::new(config::Config::new());
 
     let cors = CorsLayer::new().allow_origin(Any);
 
@@ -113,18 +117,35 @@ async fn main() {
         bundler_endpoint: Status::Offline,
     }));
 
+    let paymaster_wallets: SharedWallets = init_paymaster_wallets(&config.clone());
+
     // 🔹 Spawn a background task to fetch real statuses
     let state_clone = Arc::clone(&shared_state);
-    tokio::spawn(async move {
-        fetch_statuses(state_clone, &config).await;
+    let paymaster_wallets_clone = Arc::clone(&paymaster_wallets);
+    tokio::spawn(
+    {
+        let config = Arc::clone(&config);
+        async move {
+        fetch_statuses_task(state_clone, &config).await;
+        }
     });
+    tokio::spawn(
+    {
+        let config = Arc::clone(&config.clone());
+        async move {
+            fetch_balances_task(paymaster_wallets_clone, &config).await;
+        }
+    }
+    );
+
 
     let app = Router::new()
         .route("/api/status", get(move || get_network_status(Arc::clone(&shared_state))))
+        .route("/api/balances", get(move || get_wallets_with_balances( paymaster_wallets)))
         .layer(cors);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
-    println!("🚀 Server running at http://{}", addr);
+    info!("🚀 Server running at http://{}", addr);
 
     let listener = TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
