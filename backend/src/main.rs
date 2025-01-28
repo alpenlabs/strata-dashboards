@@ -1,16 +1,13 @@
-use axum::{
-    routing::get,
-    Json, Router,
-};
-use serde::{Serialize, Deserialize};
-use serde_json::json;
-use std::{net::SocketAddr, sync::Arc};
-use tokio::{sync::Mutex, time::{interval, Duration}};
-use tower_http::cors::{Any, CorsLayer};
-use tokio::net::TcpListener;
-use jsonrpsee::http_client::HttpClient;
-use jsonrpsee::http_client::HttpClientBuilder;
+mod config;
+use axum::{routing::get, Json, Router};
+use dotenvy::dotenv;
+use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use jsonrpsee::core::client::ClientT;
+use serde::{Deserialize, Serialize};
+use std::{net::SocketAddr, sync::Arc};
+use tokio::{net::TcpListener, sync::Mutex, time::{interval, Duration}};
+use tower_http::cors::{Any, CorsLayer};
+use config::Config;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "lowercase")]
@@ -29,11 +26,11 @@ struct NetworkStatus {
 // Shared State
 type SharedState = Arc<Mutex<NetworkStatus>>;
 
-/// Creates a JSON-RPC client
-fn create_rpc_client() -> HttpClient {
+/// Creates a JSON-RPC client with a dynamic URL
+fn create_rpc_client(rpc_url: &str) -> HttpClient {
     HttpClientBuilder::default()
-        .build("https://strataclient1ff4bc1df.devnet-annapurna.stratabtc.org")
-        .unwrap()
+        .build(rpc_url)
+        .expect("Failed to create JSON-RPC client")
 }
 
 /// Calls `strata_syncStatus` using `jsonrpsee`
@@ -57,8 +54,8 @@ async fn call_rpc_status(client: &HttpClient) -> Status {
 }
 
 /// Checks bundler health (`/health`)
-async fn check_bundler_health(client: &reqwest::Client) -> Status {
-    let url = "https://bundler.devnet-annapurna.stratabtc.org/health";
+async fn check_bundler_health(client: &reqwest::Client, config: &Config) -> Status {
+    let url = config.bundler_url();
     if let Ok(resp) = client.get(url).send().await {
         let body = resp.text().await.unwrap_or_default();
         if body.contains("ok") {
@@ -69,9 +66,10 @@ async fn check_bundler_health(client: &reqwest::Client) -> Status {
 }
 
 /// Periodically fetches real statuses
-async fn fetch_real_statuses(state: SharedState) {
+async fn fetch_statuses(state: SharedState, config: &Config) {
+    println!("🔹 Fetching statuses...");
     let mut interval = interval(Duration::from_secs(10));
-    let rpc_client = create_rpc_client();
+    let rpc_client = create_rpc_client(&config.rpc_url());
     let http_client = reqwest::Client::new();
 
     loop {
@@ -79,7 +77,7 @@ async fn fetch_real_statuses(state: SharedState) {
 
         let batch_producer = call_rpc_status(&rpc_client).await;
         let rpc_endpoint = call_rpc_status(&rpc_client).await;
-        let bundler_endpoint = check_bundler_health(&http_client).await;
+        let bundler_endpoint = check_bundler_health(&http_client, config).await;
 
         let new_status = NetworkStatus {
             batch_producer,
@@ -102,6 +100,10 @@ async fn get_network_status(state: SharedState) -> Json<NetworkStatus> {
 
 #[tokio::main]
 async fn main() {
+    dotenv().ok();
+
+    let config = config::Config::new();
+
     let cors = CorsLayer::new().allow_origin(Any);
 
     // 🔹 Shared state for network status
@@ -114,7 +116,7 @@ async fn main() {
     // 🔹 Spawn a background task to fetch real statuses
     let state_clone = Arc::clone(&shared_state);
     tokio::spawn(async move {
-        fetch_real_statuses(state_clone).await;
+        fetch_statuses(state_clone, &config).await;
     });
 
     let app = Router::new()
