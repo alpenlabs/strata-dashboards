@@ -248,6 +248,64 @@ button:focus-visible {
     font-weight: bold;
 }
 
+/* Usage stats */
+.usage-cards {
+    display: flex;
+    flex-direction: row;
+    text-align: center;
+    gap: 8px;
+}
+
+.usage-section {
+    justify-content: space-between;
+    margin: 0 20px;
+    padding: 10px 10px;
+    width: 33%;
+}
+
+.tab-container {
+    margin-bottom: 8px;
+}
+
+.usage-title {
+    /* font-weight: bold; */
+    margin: 0 1rem;
+    color: var(--strata-terracotta-med);
+}
+
+.usage-button {
+    /* border-radius: 0; */
+    color: var(--strata-terracotta-med);
+    background-color: transparent;
+    border: none;
+    outline: none;
+    box-shadow: none;
+}
+
+.usage-button-active,
+.usage-button:hover,
+.usage-button:focus {
+    text-decoration:underline;
+    border: none;
+    outline: none;
+    box-shadow: none;
+}
+
+.ops-active,
+.gas-active,
+.accounts-active
+{
+    text-decoration:underline;
+}
+
+.stat-value {
+    padding: 2rem 10px;
+    margin: 0.5rem auto;
+    border: 1px solid black;
+    border-radius: 10px;
+    font-weight: bold;
+}
+
 /* Sidebar menu */
 .menu {
     margin-top: 50px;
