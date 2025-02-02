@@ -7,11 +7,8 @@ export type Account = {
 }
 
 export type UsageStats = {
-    user_ops_count: Map<string, number>,
-    total_gas_used: Map<string, number>,
-    unique_active_accounts: Map<string, number>,
-    recent_accounts: Array<Account>,
-    top_gas_consumers: Array<Account>,
+    stats: Record<string, Record<string, number>>,
+    sel_accounts: Record<string, Record<string, Account[]>>,
 };
 
 const API_BASE_URL = import.meta.env.API_BASE_URL || "http://localhost:3000";
@@ -27,6 +24,6 @@ export const useUsageStats = () => {
     return useQuery({
         queryKey: ["usageStats"],
         queryFn: fetchUsageStats,
-        refetchInterval: 10000, // ✅ Auto-refetch every 30s
+        refetchInterval: 10000, // ✅ Auto-refetch every 60s
     });
 };

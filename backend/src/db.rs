@@ -1,15 +1,10 @@
-// use sea_orm::{Database, DatabaseConnection};
+use sqlx::{Pool, Postgres};
+use anyhow::Result;
 
-// pub struct DatabaseWrapper {
-//     pub db: DatabaseConnection,
-// }
+pub type DbPool = Pool<Postgres>;
 
-// impl DatabaseWrapper {
-//     /// Create a new database wrapper with the given database URL
-//     pub async fn new(database_url: &str) -> Self {
-//         let db = Database::connect(database_url)
-//             .await
-//             .expect("Failed to connect to PostgreSQL {database_url}");
-//         Self { db }
-//     }
-// }
+pub async fn init_db_pool(db_url: &str) -> Result<Pool<Postgres>> {
+    let pool = Pool::<Postgres>::connect(db_url).await?;
+    // The `?` operator will return early if connect() fails, producing Err(...)
+    Ok(pool)
+}

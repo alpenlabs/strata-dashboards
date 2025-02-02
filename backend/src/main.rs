@@ -2,8 +2,8 @@ mod config;
 mod wallets;
 mod utils;
 mod db;
-mod indexer;
-mod usage_stats;
+mod usage;
+mod pgu64;
 
 use axum::{routing::get, Json, Router};
 use log::info;
@@ -13,17 +13,19 @@ use jsonrpsee::core::client::ClientT;
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::{net::TcpListener, time::{interval, Duration}, sync::Mutex};
-use chrono::{Utc, Days};
-use std::collections::HashMap;
 
 use tower_http::cors::{Any, CorsLayer};
 use config::Config;
 
 use crate::wallets::{ SharedWallets, fetch_balances_task, get_wallets_with_balances, init_paymaster_wallets};
 use crate::utils::create_rpc_client;
-// use crate::db::DatabaseWrapper;
-// use crate::indexer::IndexerConfig;
-// use crate::usage_stats::{UsageStats, TimeWindowStats};
+use crate::usage::{
+    UsageMonitorConfig,
+    init_usage_monitor,
+    usage_indexer_task,
+    get_mock_usage_stats,
+    get_usage_stats
+};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "lowercase")]
@@ -48,7 +50,7 @@ async fn call_rpc_status(client: &HttpClient) -> Status {
     
     match response {
         Ok(json) => {
-            info!("RPC Response: {:?}", json);
+            // info!("RPC Response: {:?}", json);
             if json.get("tip_height").is_some() {
                 Status::Online
             } else {
@@ -76,8 +78,8 @@ async fn check_bundler_health(client: &reqwest::Client, config: &Config) -> Stat
 
 /// Periodically fetches real statuses
 async fn fetch_statuses_task(state: SharedState, config: &Config) {
-    info!("Fetching statuses...");
-    let mut interval = interval(Duration::from_secs(10));
+    // info!("Fetching statuses...");
+    let mut interval = interval(Duration::from_secs(100));
     let rpc_client = create_rpc_client(&config.rpc_url());
     let http_client = reqwest::Client::new();
 
@@ -94,7 +96,7 @@ async fn fetch_statuses_task(state: SharedState, config: &Config) {
             bundler_endpoint,
         };
 
-        info!("Updated Status: {:?}", new_status);
+        // info!("Updated Status: {:?}", new_status);
 
         let mut locked_state = state.lock().await;
         *locked_state = new_status;
@@ -104,46 +106,6 @@ async fn fetch_statuses_task(state: SharedState, config: &Config) {
 /// Handler to get the current network status
 async fn get_network_status(state: SharedState) -> Json<NetworkStatus> {
     let data = state.lock().await.clone();
-    Json(data)
-}
-
-#[derive(Serialize, Clone, Debug)]
-struct Account {
-    address: String,
-    deployed_at: String, // ISO 8601 formatted timestamp
-    gas_used: u64,
-}
-
-#[derive(Serialize, Clone, Debug)]
-struct UsageStats {
-    user_ops_count: HashMap<String, u64>,
-    total_gas_used: HashMap<String, u64>,
-    unique_active_accounts: HashMap<String, u64>,
-    recent_accounts: Vec<Account>,
-    top_gas_consumers: Vec<Account>,
-}
-
-// Shared usage stats
-type SharedUsageStats = Arc<Mutex<UsageStats>>;
-
-/// Function to generate a list of mock recent accounts.
-fn generate_recent_accounts(count: usize) -> Vec<Account> {
-    let mut accounts = Vec::new();
-    let start_date = Utc::now();
-    for i in 0..count {
-        let days_offset = Days::new(i as u64);
-        accounts.push(Account {
-            address: String::from("0xaa"),
-            deployed_at: start_date.checked_sub_days(days_offset).unwrap().to_string(),
-            gas_used: 100*i as u64,
-        });
-    }
-
-    accounts
-}
-
-async fn get_usage_stats(stats: SharedUsageStats) -> Json<UsageStats> {
-    let data = stats.lock().await.clone();
     Json(data)
 }
 
@@ -186,50 +148,22 @@ async fn main() {
     }
     );
 
-    // Initialize database and user ops fetcher
-    // let indexer_config = IndexerConfig::parse();
-    let mut user_ops = HashMap::new();
-    user_ops.insert("24h".to_string(), 1200u64);
-    user_ops.insert("30d".to_string(), 32000u64);
-    user_ops.insert("YTD".to_string(), 250000u64);
+    let usage_monitor_config = UsageMonitorConfig::new();
+    let usage_monitor_handle = init_usage_monitor(&usage_monitor_config).await.unwrap();
+    tokio::spawn(
+        {
+            async move {
+                usage_indexer_task(usage_monitor_handle.clone()).await;
+            }
+        });
 
-    let mut gas_used = HashMap::new();
-    gas_used.insert("24h".to_string(), 1500000u64);
-    gas_used.insert("30d".to_string(), 74000000u64);
-    gas_used.insert("YTD".to_string(), 480000000u64);
-
-    let mut unique_active_accounts = HashMap::new();
-    unique_active_accounts.insert("24h".to_string(), 48u64);
-    unique_active_accounts.insert("30d".to_string(), 450u64);
-    unique_active_accounts.insert("YTD".to_string(), 3200u64);
-
-    let shared_usage_stats = Arc::new(Mutex::new(UsageStats {
-        user_ops_count: user_ops,
-        total_gas_used: gas_used,
-        unique_active_accounts: unique_active_accounts,
-        recent_accounts: generate_recent_accounts(5),
-        top_gas_consumers: generate_recent_accounts(5),
-    }));
-
-    // let database = Arc::new(DatabaseWrapper::new(&indexer_config.database_url).await);
-
-    // // 🔹 Shared state for usage stats
-    // let shared_state = Arc::new(Mutex::new(UsageStats {
-    //     stats: HashMap<String, TimeWindowStats>::new(),
-    //     recent_stats: Vec<String>::new(),
-    // }));
-    // tokio::spawn(
-    //     {
-    //         let config = Arc::clone(&indexer_config);
-    //         async move {
-    //             fetch_user_ops_task(database.clone(), &config).await;
-    //         }
-    //     });
-
+    let usage_stats = get_mock_usage_stats();
+    // 🔹 Shared state for usage stats
+    let shared_usage_stats = Arc::new(Mutex::new(usage_stats));
     let app = Router::new()
         .route("/api/status", get(move || get_network_status(Arc::clone(&shared_state))))
         .route("/api/balances", get(move || get_wallets_with_balances( paymaster_wallets)))
-        .route("/api/usage_stats", get(move || get_usage_stats(Arc::clone(&shared_usage_stats))))
+        // .route("/api/usage_stats", get(move || get_usage_stats(Arc::clone(&shared_usage_stats))))
         .layer(cors);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));

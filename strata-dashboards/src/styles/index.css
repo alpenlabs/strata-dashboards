@@ -273,28 +273,14 @@ button:focus-visible {
     color: var(--strata-terracotta-med);
 }
 
-.usage-button {
+.usage-tab {
     /* border-radius: 0; */
+    padding: 10px 10px;
     color: var(--strata-terracotta-med);
     background-color: transparent;
-    border: none;
-    outline: none;
-    box-shadow: none;
 }
 
-.usage-button-active,
-.usage-button:hover,
-.usage-button:focus {
-    text-decoration:underline;
-    border: none;
-    outline: none;
-    box-shadow: none;
-}
-
-.ops-active,
-.gas-active,
-.accounts-active
-{
+.usage-tab-active {
     text-decoration:underline;
 }
 

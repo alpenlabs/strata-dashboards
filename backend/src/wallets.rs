@@ -60,8 +60,8 @@ impl PaymasterWallets {
 
 /// Periodically fetches wallet balances
 pub async fn fetch_balances_task(wallets: SharedWallets, config: &Config) {
-    info!("Fetching balances...");
-    let mut interval = interval(Duration::from_secs(10));
+    // info!("Fetching balances...");
+    let mut interval = interval(Duration::from_secs(100));
     let rpc_client = create_rpc_client(&config.reth_url());
 
     loop {
@@ -83,7 +83,7 @@ pub async fn fetch_balances_task(wallets: SharedWallets, config: &Config) {
 
 /// Fetches the ETH balance of a given wallet address in Wei (integer)
 pub async fn fetch_wallet_balance(client: &HttpClient, wallet_address: &str) -> Option<String> {
-    info!("🔹 Fetching balance for wallet: {}", wallet_address);
+    // info!("🔹 Fetching balance for wallet: {}", wallet_address);
 
     let params = (wallet_address, "latest");  // ✅ Use a tuple instead of `serde_json::Value`
     let response: Result<serde_json::Value, _> = client.request("eth_getBalance", params).await;
@@ -99,7 +99,7 @@ pub async fn fetch_wallet_balance(client: &HttpClient, wallet_address: &str) -> 
             }
         }
         Err(e) => {
-            info!("🔹 Error fetching balance: {}", e);
+            // info!("🔹 Error fetching balance: {}", e);
         }
     }
     None
