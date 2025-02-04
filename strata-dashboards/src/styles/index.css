@@ -292,6 +292,39 @@ button:focus-visible {
     font-weight: bold;
 }
 
+.accounts-section {
+    justify-content: space-between;
+    margin: 0 20px;
+    padding: 10px 10px;
+    width: 50%;
+}
+
+.account-list {
+    list-style: none;
+    padding: 0;
+}
+  
+.account-item {
+    display: flex;
+    flex-direction: column;
+    padding: 8px 0;
+    border-bottom: 1px solid #ddd;
+}
+  
+.account-address {
+    font-weight: bold;
+}
+  
+.account-detail {
+    font-size: 14px;
+    color: gray;
+}
+    
+.no-accounts {
+    font-style: italic;
+    color: gray;
+}
+
 /* Sidebar menu */
 .menu {
     margin-top: 50px;

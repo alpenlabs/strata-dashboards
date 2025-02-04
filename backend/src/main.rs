@@ -50,7 +50,7 @@ async fn call_rpc_status(client: &HttpClient) -> Status {
     
     match response {
         Ok(json) => {
-            // info!("RPC Response: {:?}", json);
+            info!("RPC Response: {:?}", json);
             if json.get("tip_height").is_some() {
                 Status::Online
             } else {
@@ -78,7 +78,7 @@ async fn check_bundler_health(client: &reqwest::Client, config: &Config) -> Stat
 
 /// Periodically fetches real statuses
 async fn fetch_statuses_task(state: SharedState, config: &Config) {
-    // info!("Fetching statuses...");
+    info!("Fetching statuses...");
     let mut interval = interval(Duration::from_secs(100));
     let rpc_client = create_rpc_client(&config.rpc_url());
     let http_client = reqwest::Client::new();
@@ -96,7 +96,7 @@ async fn fetch_statuses_task(state: SharedState, config: &Config) {
             bundler_endpoint,
         };
 
-        // info!("Updated Status: {:?}", new_status);
+        info!("Updated Status: {:?}", new_status);
 
         let mut locked_state = state.lock().await;
         *locked_state = new_status;
@@ -150,10 +150,11 @@ async fn main() {
 
     let usage_monitor_config = UsageMonitorConfig::new();
     let usage_monitor_handle = init_usage_monitor(&usage_monitor_config).await.unwrap();
+    let um_handle_clone = usage_monitor_handle.clone();
     tokio::spawn(
         {
             async move {
-                usage_indexer_task(usage_monitor_handle.clone()).await;
+                usage_indexer_task(um_handle_clone).await;
             }
         });
 
@@ -163,7 +164,7 @@ async fn main() {
     let app = Router::new()
         .route("/api/status", get(move || get_network_status(Arc::clone(&shared_state))))
         .route("/api/balances", get(move || get_wallets_with_balances( paymaster_wallets)))
-        // .route("/api/usage_stats", get(move || get_usage_stats(Arc::clone(&shared_usage_stats))))
+        .route("/api/usage_stats", get(move || get_usage_stats(Arc::clone(&shared_usage_stats), usage_monitor_handle)))
         .layer(cors);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));

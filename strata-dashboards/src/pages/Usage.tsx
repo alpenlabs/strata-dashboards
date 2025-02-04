@@ -1,16 +1,17 @@
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { useUsageStats } from "../hooks/useUsageStats.ts";
   
 interface TimePeriodTabsProps {
+    timePeriods: string[];
     selectedPeriod: string; // Allow any dynamic time period
     setSelectedPeriod: (period: string) => void; // Update function
 }
 
-const TimePeriodTabs: React.FC<TimePeriodTabsProps> = ({ selectedPeriod, setSelectedPeriod }) => {
+const TimePeriodTabs: React.FC<TimePeriodTabsProps> = ({ timePeriods, selectedPeriod, setSelectedPeriod }) => {
     return (
       <div className="tab-container">
-        {(["24h", "30d", "YTD"] as const).map((period) => (
+        {timePeriods.map((period) => (
           <span
             key={period}
             onClick={() => setSelectedPeriod(period)}
@@ -28,21 +29,26 @@ export default function Usage() {
     const { data, isLoading, error } = useUsageStats();
     if (isLoading) return <p className="loading-text">Loading...</p>
     if (error || !data) return <p className="error-text">Error loading data</p>
-    
-    const [selectedPeriods, setSelectedPeriods] = useState<Record<string, string>>(() => {
-        // Provide an initial state to avoid undefined errors
-        if (!data || !Object.keys(data.stats).length) return {};
-      
+
+    const [statPeriods, setStatPeriods] = useState<Record<string, string>>({});
+    useEffect(() => {
         const statNames = Object.keys(data.stats);
         const firstStatName = statNames[0];
-        const timePeriods = firstStatName ? Object.keys(data.stats[firstStatName]) : [];
-        const defaultSelectedPeriods: Record<string, string> = {};
+        const timePeriods = Object.keys(data.stats[firstStatName]);
+
+        const defaultStatPeriods: Record<string, string> = {};
         statNames.forEach((stat) => {
-          defaultSelectedPeriods[stat] = timePeriods[0]; // Default to first available time period
+            defaultStatPeriods[stat] = timePeriods[0]; // Default to first available time period
         });
-      
-        return defaultSelectedPeriods;
-      });
+
+        setStatPeriods(defaultStatPeriods);
+    }, [data]); // Ensures this only runs when `data` updates
+
+    // Sort recent accounts by timestamp and top gas consumers by gas used
+    const recent_accounts = data.sel_accounts["Recent accounts"]["recent"].sort((a, b) => 
+        Number(b.deployed_at) - Number(a.deployed_at));
+    const top_gas_consumers = data.sel_accounts["Top gas consumers"]["24h"].sort((a, b) => 
+        Number(b.gas_used) - Number(a.gas_used));
 
     return (
         <div className="usage-content">
@@ -54,21 +60,53 @@ export default function Usage() {
                             <section key={statName} className="usage-section">
                                 <text className="usage-title">{statName}</text> {/* Format title */}
                                 <TimePeriodTabs
-                                    selectedPeriod={selectedPeriods[statName]}
+                                    timePeriods={Object.keys(data.stats[statName])}
+                                    selectedPeriod={statPeriods[statName]}
                                     setSelectedPeriod={(period) =>
-                                        setSelectedPeriods((prev) => ({ ...prev, [statName]: period }))
+                                        setStatPeriods((prev) => ({ ...prev, [statName]: period }))
                                     }
                                 />
                                 <div className="stat-value">
-                                    {data.stats[statName][selectedPeriods[statName]]}
+                                    {data.stats[statName][statPeriods[statName]]}
                                 </div>
                             </section>
                         ))}
-                        {/* <section className="usage-cards">
-                            <UsageCard title="User Ops Count" stat={data?.user_ops_count ?? "Unknown"} />
-                            <UsageCard title="Total Gas Used" stat={data?.total_gas_used ?? "Unknown"} />
-                            <UsageCard title="Unique Active Acounts" stat={data?.unique_active_accounts ?? "Unknown"} />
-                        </section> */}
+                    </div>
+                    <div className="usage-cards">
+                        <section key="Recent accounts" className="accounts-section">
+                            <text className="usage-title">Recent accounts</text> {/* Format title */}
+                            {recent_accounts.length > 0 ? (
+                                <ul className="account-list">
+                                {data.sel_accounts["Recent accounts"]["recent"].map((account, index) => (
+                                    <li key={index} className="account-item">
+                                        <span className="account-address">{account.address}</span>
+                                        <span className="account-detail">
+                                            Deployed: {new Date(account.deployed_at).toLocaleString()}
+                                        </span>
+                                    </li>
+                                ))}
+                                </ul>
+                            ) : (
+                                <p className="no-accounts">No accounts found.</p>
+                            )}
+                        </section>
+                        <section key="Top gas consumers" className="accounts-section">
+                            <text className="usage-title">Top gas consumers (24h)</text> {/* Format title */}
+                            {top_gas_consumers.length > 0 ? (
+                                <ul className="account-list">
+                                {top_gas_consumers.map((account, index) => (
+                                    <li key={index} className="account-item">
+                                        <span className="account-address">{account.address}</span>
+                                        <span className="account-detail">
+                                            Gas Used: {Number(account.gas_used).toLocaleString()}
+                                        </span>
+                                    </li>
+                                ))}
+                                </ul>
+                            ) : (
+                                <p className="no-accounts">No accounts found.</p>
+                            )}                                    
+                        </section>
                     </div>
                 </div>
             )}
