@@ -20,7 +20,6 @@ use crate::utils::create_rpc_client;
 use crate::usage::{
     usage_monitoring_task,
     get_initial_stats,
-    get_mock_usage_stats,
     get_usage_stats
 };
 

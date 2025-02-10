@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, collections::HashMap, collections::HashSet};
-use chrono::{Utc, DateTime, Duration, Days, TimeZone, Datelike, TimeDelta};
-use rand::Rng;
-use hex;
+use chrono::{Utc, DateTime, Duration, Days, Datelike};
 use axum::Json;
 use serde_json::{json, Value};
 use serde::de::{self, Deserializer};
@@ -349,65 +347,4 @@ async fn fetch_accounts(start_time: Option<DateTime<Utc>>, end_time: Option<Date
 pub async fn get_usage_stats(state: SharedUsageStats) -> Json<UsageStats> {
     let data = state.lock().await.clone();
     Json(data)
-}
-
-/// Function to generate a random Ethereum-style address.
-fn generate_random_address() -> String {
-    let mut rng = rand::thread_rng();
-    let random_bytes: [u8; 20] = rng.gen();
-    format!("0x{}", hex::encode(random_bytes))
-}
-
-/// Function to generate a list of mock recent accounts.
-fn generate_recent_accounts(count: usize) -> Vec<Account> {
-    let mut accounts = Vec::new();
-    let start_date = Utc::now();
-    for i in 0..count {
-        let time_delta = TimeDelta::minutes(i as i64);
-        accounts.push(Account {
-            address: generate_random_address(),
-            deployed_at: start_date.checked_sub_signed(time_delta).unwrap().to_string(),
-            gas_used: 100*(i+1) as u64,
-        });
-    }
-
-    accounts
-}
-
-// Mock data to test backend <> frontend
-pub fn get_mock_usage_stats() -> UsageStats {
-    let mut stats = HashMap::new();
-
-    let mut user_ops = HashMap::new();
-    user_ops.insert("24h".to_string(), 1200u64);
-    user_ops.insert("30d".to_string(), 32000u64);
-    user_ops.insert("YTD".to_string(), 250000u64);
-
-    let mut gas_used = HashMap::new();
-    gas_used.insert("24h".to_string(), 1500000u64);
-    gas_used.insert("30d".to_string(), 74000000u64);
-    gas_used.insert("YTD".to_string(), 480000000u64);
-
-    let mut unique_active_accounts = HashMap::new();
-    unique_active_accounts.insert("24h".to_string(), 48u64);
-    unique_active_accounts.insert("30d".to_string(), 450u64);
-    unique_active_accounts.insert("YTD".to_string(), 3200u64);
-
-    stats.insert("User ops".to_string(), user_ops);
-    stats.insert("Gas used".to_string(), gas_used);
-    stats.insert("Unique active accounts".to_string(), unique_active_accounts);
-
-    let mut sel_accounts = HashMap::new();
-    let mut accounts_created = HashMap::new();
-    let recent_accounts = generate_recent_accounts(5);
-    accounts_created.insert("recent".to_string(), recent_accounts);
-
-    let mut gas_consumers = HashMap::new();
-    let top_gas_consumers = generate_recent_accounts(5);
-    gas_consumers.insert("24h".to_string(), top_gas_consumers);
-
-    sel_accounts.insert("Recent accounts".to_string(), accounts_created);
-    sel_accounts.insert("Top gas consumers".to_string(), gas_consumers);
-
-    UsageStats::new(stats, sel_accounts)
 }
