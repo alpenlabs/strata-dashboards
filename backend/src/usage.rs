@@ -1,127 +1,42 @@
 use serde::{Deserialize, Serialize};
-use std::{env, sync::Arc, collections::HashMap};
-use chrono::{Utc, TimeDelta};
-use sqlx::Row;
+use std::{sync::Arc, collections::HashMap, collections::HashSet};
+use chrono::{Utc, DateTime, Duration, Days, TimeZone, Datelike, TimeDelta};
 use rand::Rng;
 use hex;
 use axum::Json;
-use dotenvy::dotenv;
-use serde_json::json;
-use jsonrpsee::http_client::HttpClient;
-use jsonrpsee::core::client::ClientT;
-use tokio::{sync::Mutex, time::interval, time::Duration};
+use serde_json::{json, Value};
+use serde::de::{self, Deserializer};
+use tokio::{sync::Mutex, time::interval};
 use anyhow::{Result, anyhow};
-// use ethers::prelude::*;
-// use ethers::providers::{Ws, Provider};
 use log::{info, error};
 
-use crate::db::{DbPool, init_db_pool};
-use crate::utils::create_rpc_client;
-use crate::pgu64::PgU64;
+const USER_OPS_QUERY_URL: &str = "http://localhost/api/v2/proxy/account-abstraction/operations";
+const ACCOUNTS_QUERY_URL: &str = "http://localhost/api/v2/proxy/account-abstraction/accounts";
 
 
-#[derive(Debug, Clone)]
-pub struct UsageMonitorConfig {
-    /// PostgreSQL database url
-    pub database_url: String,
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct Account {
+    #[serde(deserialize_with = "get_address_hash")]
+    address: String,
 
-    /// JSON-RPC Endpoint for eth logs
-    pub rpc_url: String,
+    #[serde(rename = "creation_timestamp", deserialize_with = "from_null_or_string")]
+    deployed_at: String, // ISO 8601 formatted timestamp
 
-    /// Canonical EntryPoint address
-    pub entrypoint_address: String,
-
-    /// keccak256 of UserOperationEvent signature
-    pub userop_event_topic: String,
-
-    /// Batch size for querying eth logs e.g. 2000
-    pub batch_size: u64,
-}
-
-impl UsageMonitorConfig {
-    pub fn new() -> Self {
-        dotenv().ok(); // Load `.env` file if present
-
-        let database_url = env::var("DATABASE_URL").ok()
-            .unwrap_or_else(|| {"https://bundler.devnet-annapurna.stratabtc.org/hth".to_string()});
-
-        // let rpc_url = env::var("RETH_URL").ok()
-        //   .unwrap_or_else(|| {"https://stratareth3666f0713.devnet-annapurna.stratabtc.org/".to_string()});
-        let rpc_url = "https://stratareth3666f0713.devnet-annapurna.stratabtc.org/".to_string();
-
-        // let entrypoint_address = env::var("ENTRYPOINT_ADDRESS").ok()
-        //     .unwrap_or_else(|| {"0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789".to_string()});
-        let entrypoint_address = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789".to_string();
-
-        let userop_event_topic = env::var("USEROP_EVENT_TOPIC").ok()
-            .unwrap_or_else(|| {"0xd88f804a9b3fa8f0bb160c49edc57dff967f62d407125fba2377b89f77dde8f6".to_string()});
-
-        let batch_size = env::var("USEROP_QUERY_BATCH_SIZE").ok()
-            .and_then(|val| val.parse::<u64>().ok())
-            .unwrap_or_else(|| {1000});
-
-        info!(
-            "🔹 Loaded IndexerConfig: database_url = {}, rpc_url = {}, entrypoint_address = {}",
-            database_url, rpc_url, entrypoint_address
-        );
-
-        UsageMonitorConfig {
-            database_url,
-            rpc_url,
-            entrypoint_address,
-            userop_event_topic,
-            batch_size,
-        }
-    }
-
-    /// Getter for `database_url`
-    pub fn database_url(&self) -> String {
-        self.database_url.clone()
-    }
-
-    /// Getter for `rpc_url`
-    pub fn rpc_url(&self) -> String {
-        self.rpc_url.clone()
-    }
-
-    /// Getter for `entrypoint_address`
-    pub fn entrypoint_address(&self) -> String {
-        self.entrypoint_address.clone()
-    }
-
-    /// Getter for `userop_event_topic`
-    pub fn userop_event_topic(&self) -> String {
-        self.userop_event_topic.clone()
-    }
-
-    /// Getter for `batch_size`
-    pub fn batch_size(&self) -> u64 {
-        self.batch_size
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct UsageMonitorHandle {
-    pub config: UsageMonitorConfig,
-    pub db_pool: DbPool,
-    pub rpc_client: HttpClient,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct EthLog {
-    pub sender: String,
-    pub topics: Vec<String>,
-    pub gas_used: String,
-    pub block_number: String,
-    pub transaction_hash: String,
-    pub data: String,
+    #[serde(default)]
+    gas_used: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Account {
-    address: String,
-    deployed_at: String, // ISO 8601 formatted timestamp
+struct UserOp {
+    #[serde(rename = "address", deserialize_with = "get_address_hash")]
+    sender: String,
+
+    #[serde(rename = "fee")]
+    #[serde(deserialize_with = "convert_to_u64")]
     gas_used: u64,
+
+    #[serde(rename = "timestamp")]
+    timestamp: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -135,7 +50,7 @@ pub struct UsageStats {
 }
 
 impl UsageStats {
-    pub fn new(
+    fn new(
         stats: HashMap<String, HashMap<String, u64>>,
         sel_accounts: HashMap<String, HashMap<String, Vec<Account>>>,
     ) -> Self {
@@ -149,305 +64,291 @@ impl UsageStats {
 // Shared usage stats
 pub type SharedUsageStats = Arc<Mutex<UsageStats>>;
 
-pub async fn init_usage_monitor(config: &UsageMonitorConfig) -> Result<UsageMonitorHandle, anyhow::Error> {
-    // 1) Connect to DB
-    let db_pool = init_db_pool(&config.database_url()).await?;
-    // 2) Create indexer_state table
-    sqlx::query(r#"
-        CREATE TABLE IF NOT EXISTS indexer_state (
-            id SERIAL PRIMARY KEY,
-            last_processed_block BIGINT NOT NULL
-        )
-    "#)
-    .execute(&db_pool)
-    .await?;
 
-    // 3) Insert an initial row
-    sqlx::query(r#"
-        INSERT INTO indexer_state (id, last_processed_block)
-        VALUES (1, $1)
-        ON CONFLICT (id) DO NOTHING
-    "#)
-    .bind(PgU64::from_u64(1).to_i64())
-    .bind(PgU64::from_u64(0).to_i64())
-    .execute(&db_pool)
-    .await?;
+pub fn get_initial_stats() -> UsageStats {
+    let mut stats = HashMap::new();
 
-    // 3) Create a table to index user ops
-    sqlx::query(r#"
-        CREATE TABLE IF NOT EXISTS user_ops (
-            id SERIAL PRIMARY KEY,
-            sender TEXT NOT NULL,                   -- e.g. from topics[2]
-            block_number BIGINT NOT NULL,           -- block number (decoded from hex)
-            transaction_hash TEXT NOT NULL,         -- transaction hash for reference
-            gas_used BIGINT NOT NULL,               -- gas used
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );
-    "#)
-    .execute(&db_pool)
-    .await?;
+    let mut user_ops = HashMap::new();
+    user_ops.insert("24h".to_string(), 0u64);
+    user_ops.insert("30d".to_string(), 0u64);
+    user_ops.insert("YTD".to_string(), 0u64);
 
-    // TODO
-    // -- Create indexes for faster querying on important fields:
-    // CREATE INDEX idx_user_ops_block_number ON user_ops(block_number);
-    // CREATE INDEX idx_user_ops_sender         ON user_ops(sender);
-    // CREATE INDEX idx_user_ops_tx_hash        ON user_ops(transaction_hash);
+    let mut gas_used = HashMap::new();
+    gas_used.insert("24h".to_string(), 0u64);
+    gas_used.insert("30d".to_string(), 0u64);
+    gas_used.insert("YTD".to_string(), 0u64);
 
-    // Create an rpc client
-    let rpc_client = create_rpc_client(&config.rpc_url());
-    Ok(UsageMonitorHandle {
-        config: config.clone(),
-        db_pool,
-        rpc_client,
-    })
+    let mut unique_active_accounts = HashMap::new();
+    unique_active_accounts.insert("24h".to_string(), 0u64);
+    unique_active_accounts.insert("30d".to_string(), 0u64);
+    unique_active_accounts.insert("YTD".to_string(), 0u64);
+
+    stats.insert("User ops".to_string(), user_ops);
+    stats.insert("Gas used".to_string(), gas_used);
+    stats.insert("Unique active accounts".to_string(), unique_active_accounts);
+
+    let mut sel_accounts = HashMap::new();
+    let mut accounts_created = HashMap::new();
+    accounts_created.insert("recent".to_string(), Vec::new());
+
+    let mut gas_consumers = HashMap::new();
+    gas_consumers.insert("24h".to_string(), Vec::new());
+
+    sel_accounts.insert("Recent accounts".to_string(), accounts_created);
+    sel_accounts.insert("Top gas consumers".to_string(), gas_consumers);
+
+    UsageStats::new(stats, sel_accounts)
 }
 
-pub async fn usage_indexer_task(handle: UsageMonitorHandle) {
-    info!("calling get_ethLogs for UserOperationEvent ...");
-    let mut interval = interval(Duration::from_secs(10));
+/// Periodically fetch user operations and accounts and compute usage stats
+pub async fn usage_monitoring_task(shared_stats: SharedUsageStats) {
+    // info!("Fetching balances...");
+    let mut interval = interval(tokio::time::Duration::from_secs(100));
 
-    // 1) Get latest block
-    let latest_block = get_latest_block_number(&handle.rpc_client).await.unwrap();
-    info!("🔹 latest block number {}", latest_block);
-
-    // 2) Load last processed block
-    let mut from_block = load_last_processed_block(&handle.db_pool).await.unwrap();
-    info!("🔹 from block number {}", from_block);
-
-    // 3) Loop in batches
-    while from_block <= latest_block {
-        let to_block = std::cmp::min(from_block + handle.config.batch_size(), latest_block);
-
-        // 4) Fetch logs
-        let logs = fetch_logs_in_range(
-            &handle.rpc_client,
-            &handle.config.entrypoint_address(),
-            &handle.config.userop_event_topic(),
-            from_block,
-            to_block
-        )
-        .await.unwrap();
-
-        // 5) Insert logs into DB
-        for eth_log in logs {
-            // parse each log's data
-            // decode userOpHash, sender, etc. from topics/data
-            _ = insert_user_operation(&handle.db_pool, &eth_log).await;
-            info!("🔹 Log {}, {}", &eth_log.sender, eth_log.gas_used);
-        }
-
-        // 6) Update last processed block
-        _ = save_last_processed_block(&handle.db_pool, to_block).await;
-        info!("✅ Indexed blocks {} -> {}", from_block, to_block);
-
-        if to_block == latest_block {
-            break;
-        }
-        from_block = to_block + 1;
-
-        // Sleep briefly to avoid rate-limit
+    loop {
         interval.tick().await;
+        let now = Utc::now();
+        let max_days = max_days_to_monitor(now);
+        let start_time = now.checked_sub_days(Days::new(max_days));
+        let mut locked_stats = shared_stats.lock().await;
+        let result = fetch_user_ops(start_time, Some(now)).await;
+
+        // Aggregate gas used per sender (in the last 24 hours)
+        let mut gas_usage: HashMap<String, u64> = HashMap::new();
+
+        match result {
+            Ok(user_ops) => {
+                info!("🔹 user ops count {}", user_ops.len());
+                let time_windows: Vec<(&str, Duration)> = vec![
+                    ("24h", Duration::days(1)),
+                    ("30d", Duration::days(30)),
+                    ("YTD", Duration::days(now.ordinal() as i64)) // Days since Jan 1st
+                ];
+
+                // Initialize or reset stats
+                for (period, _) in &time_windows {
+                    locked_stats.stats.entry("User ops".to_string()).or_default().insert(period.to_string(), 0);
+                    locked_stats.stats.entry("Gas used".to_string()).or_default().insert(period.to_string(), 0);
+                    locked_stats.stats.entry("Unique active accounts".to_string()).or_default().insert(period.to_string(), 0);
+                }
+
+                // Create sets to track unique active accounts per period
+                let mut unique_accounts: HashMap<&str, HashSet<String>> = HashMap::new();
+                for (period, _) in &time_windows {
+                    unique_accounts.insert(period, HashSet::new());
+                }
+
+                // compute stats for 24h, 30d and YTD
+                for entry in user_ops {
+                    if let Ok(op_time) = DateTime::parse_from_rfc3339(&entry.timestamp).map(|dt| dt.with_timezone(&Utc)) {
+                        for (period, duration) in &time_windows {
+                            if now - *duration <= op_time {
+                                *locked_stats.stats.entry("User ops".to_string()).or_default().entry(period.to_string()).or_insert(0) += 1;
+                                *locked_stats.stats.entry("Gas used".to_string()).or_default().entry(period.to_string()).or_insert(0) += entry.gas_used;
+
+                                // Track unique senders
+                                unique_accounts.get_mut(period).unwrap().insert(entry.sender.clone());
+                            }
+                        }
+
+                        // Update gas used by sender
+                        if now - Duration::days(1) <= op_time {
+                            *gas_usage.entry(entry.sender.clone()).or_insert(0) += entry.gas_used;
+                        }
+                    }
+                }
+
+                // Store the count of unique active accounts
+                for (period, accounts_set) in unique_accounts {
+                    locked_stats.stats.entry("Unique active accounts".to_string())
+                        .or_default()
+                        .insert(period.to_string(), accounts_set.len() as u64);
+                }
+            }
+            Err(e) =>
+            {
+                error!("Fetch user ops failed {}", e);
+            }
+        }
+
+        let result = fetch_accounts(start_time, Some(now)).await;
+        match result {
+            Ok(accounts) => {
+                info!("🔹 accounts count {}", accounts.len());
+                // Sort accounts by creation_timestamp (most recent first)
+                let mut sorted_accounts: Vec<Account> = accounts
+                    .iter()
+                    .filter(|acc| acc.deployed_at != "".to_string()) // Ignore accounts without a timestamp
+                    .cloned()
+                    .collect();
+
+                sorted_accounts.sort_by(|a, b| {
+                    let a_time = DateTime::parse_from_rfc3339(&a.deployed_at.as_str())
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or(Utc::now()); // Default to now if parsing fails
+                    let b_time = DateTime::parse_from_rfc3339(b.deployed_at.as_str())
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or(Utc::now()); 
+
+                    b_time.cmp(&a_time) // Sort descending
+                });
+
+                // Take the top 5 most recent accounts
+                let recent_accounts = sorted_accounts.into_iter().take(5).collect::<Vec<_>>();
+
+                // Store in shared stats
+                locked_stats.sel_accounts.entry("Recent accounts".to_string())
+                    .or_default()
+                    .insert("recent".to_string(), recent_accounts);
+            } 
+            Err(e) =>
+            {
+                error!("Fetch accounts failed {}", e);
+            }
+        }
+
+        // Top gas consumers: get from gas_usage and sort by gas used (descending)
+        let gas_usage_clone = gas_usage.clone();
+        let mut top_gas_consumers: Vec<Account> = gas_usage_clone
+            .into_iter()
+            .map(|(address, gas_used)| Account { address, deployed_at: "".to_string(), gas_used })
+            .collect();
+
+        top_gas_consumers.sort_by_key(|acc| gas_usage.get(&acc.address).cloned().unwrap_or(0));
+        top_gas_consumers.reverse();
+        top_gas_consumers.truncate(5); // Take top 5
+
+        // Store in shared stats
+        locked_stats.sel_accounts.entry("Top gas consumers".to_string())
+            .or_default()
+            .insert("24h".to_string(), top_gas_consumers);
     }
 }
 
-pub fn parse_u64_from_hex(hex_str: &str) -> Result<u64> {
-    // Remove the "0x" prefix if it exists.
-    let trimmed = hex_str.trim_start_matches("0x");
+fn max_days_to_monitor(now: DateTime<Utc>) -> u64 {
+    let ytd_start = Utc.with_ymd_and_hms(now.year(), 1, 1, 0, 0, 0);
+    let ytd_days = now.day() as u64 - ytd_start.unwrap().day() as u64;
 
-    // Attempt to parse the remaining string as a hexadecimal number.
-    u64::from_str_radix(trimmed, 16)
-        .map_err(|e| anyhow!("Error parsing hex string '{}': {}", hex_str, e))
+    if ytd_days > 30 {
+        ytd_days
+    } else {
+        30
+    }
 }
 
-pub async fn get_latest_block_number(client: &HttpClient) -> Result<u64> {
-    info!("🔹 Fetching latest block number");
+// Custom deserializer to extract "hash" from the "address" field
+fn get_address_hash<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value: Value = Deserialize::deserialize(deserializer)?;
 
-    let params: [(); 0] = [];
-    // The request can fail => we use `?` to propagate the error
-    let response: serde_json::Value = client.request("eth_blockNumber", params).await?;
+    // Extract "hash" field from "address"
+    if let Some(hash) = value.get("hash").and_then(|h| h.as_str()) {
+        return Ok(hash.to_string());
+    }
 
-    // Extract the "result" field as a string
-    let hex_str = response
-        .as_str()
-        .ok_or_else(|| anyhow!("Expected the response to be a string, but got: {:?}", response))?;
-
-    // Remove the "0x" prefix (if present) and parse the hex string into a u64
-    let block_num = parse_u64_from_hex(hex_str)?;
-
-    Ok(block_num)
+    Err(de::Error::missing_field("address.hash"))
 }
 
-async fn load_last_processed_block(db_pool: &DbPool) -> Result<u64> {
-    let row = sqlx::query(
-        r#"SELECT last_processed_block FROM indexer_state WHERE id = 1"#
-    )
-    .fetch_one(db_pool)
-    .await?;
-
-    // Extract the column by name; returns an i64
-    let last_processed_block: i64 = row.try_get("last_processed_block")?;;
-
-    // Ok(PgU64::from_i64(last_processed_block).0)
-
-    Ok(last_processed_block as u64)
+// Custom deserializer to convert a string to u64
+fn convert_to_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: String = Deserialize::deserialize(deserializer)?;
+    s.parse::<u64>().map_err(de::Error::custom) // Convert string to u64 safely
 }
 
-pub async fn fetch_logs_in_range(
-    client: &HttpClient,
-    entrypoint_address: &str,
-    userop_event_topic: &str,
-    from_block: u64,
-    to_block: u64,
-) -> Result<Vec<EthLog>> {
-    // Convert numeric block to hex (e.g., 0x1234)
-    let from_block_hex = format!("0x{:x}", from_block);
-    let to_block_hex   = format!("0x{:x}", to_block);
+// Custom deserializer to handle `null` timestamps
+fn from_null_or_string<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let opt: Option<Value> = Option::deserialize(deserializer)?;
+    match opt {
+        Some(Value::String(s)) => Ok(s), // If valid string, return it
+        Some(Value::Null) | None => Ok("".to_string()), // If null or missing, return None
+        _ => Err(de::Error::custom("Expected a string or null")),
+    }
+}
 
-    // Build the filter object
-    let filter = json!({
-        "fromBlock": from_block_hex,
-        "toBlock": to_block_hex,
-        "address": entrypoint_address,
-        "topics": [userop_event_topic]
+async fn fetch_json(endpoint: &str, start_time: Option<DateTime<Utc>>, end_time: Option<DateTime<Utc>>) 
+    -> Result<serde_json::Value, anyhow::Error> {
+
+    let http_client = reqwest::Client::new();
+
+    // Construct JSON parameters
+    let mut params = json!({
     });
 
-    info!("🔹 filter {}", filter);
-    // Pass the filter as params to `eth_getLogs`
-    // The generic type `Vec<EthLog>` tells jsonrpsee how to deserialize the result
-    let result: Result<Vec<serde_json::Value>, _> = client.request("eth_getLogs", (filter.clone(),)).await;
-    // .map_err(|err| anyhow!("JSON-RPC error: {err}"))?;
-    match result {
-        Ok(raw_response) => {
-            info!(
-                "✅ Raw JSON response: {}",
-                serde_json::to_string_pretty(&raw_response).unwrap_or_else(|_| "Failed to format JSON".to_string())
-            );
-            // Ok(raw_response)
-        }
-        Err(err) => {
-            error!("🚨 JSON-RPC request failed: {:?}", err);
-            // Err(anyhow!("JSON-RPC request error: {:?}", err))
-        }
+    let format_time = |time: DateTime<Utc>| -> String {
+        time.format("%Y-%m-%d%H:%M:%S").to_string() // Correct format: YYYY-MM-DDHH:MM:SS
+    };
+
+    if let Some(start_ts) = start_time {
+        params["start_time"] = json!(&format_time(start_ts));
+    }
+    if let Some(end_ts) = end_time {
+        params["end_time"] = json!(&format_time(end_ts));
     }
 
-    let logs_result: Result<Vec<EthLog>, _> = client.request("eth_getLogs", (filter,)).await;
+    info!("Sending request to: {} with query params {:?}", endpoint, params);
+    // Make an HTTP POST request
+    let response = http_client
+        .get(endpoint)
+        .json(&params)
+        .send()
+        .await?
+        .error_for_status()? // Converts HTTP errors into Rust errors
+        .json::<Value>()
+        .await?;
 
-    match logs_result {
-        Ok(logs) => {
-            info!("✅ Successfully fetched {} logs", logs.len());
-            Ok(logs)
+    Ok(response)
+}
+
+async fn fetch_user_ops(start_time: Option<DateTime<Utc>>, end_time: Option<DateTime<Utc>>) -> Result<Vec<UserOp>, anyhow::Error> {
+    info!("🔹 Fetching user operations");
+
+    // Make API call with parameters
+    match fetch_json(USER_OPS_QUERY_URL, start_time, end_time).await {
+        Ok(data) => {
+            // Extract "items" field and deserialize into Vec<UserOps>
+            if let Some(items) = data.get("items") {
+                let user_ops: Vec<UserOp> = serde_json::from_value(items.clone())
+                    .map_err(|e| anyhow!("Failed to deserialize user ops: {}", e))?;
+                Ok(user_ops)
+            } else {
+                error!("Unexpected response");
+                Err(anyhow!("Unexpected response"))
+            }
+        }
+        // error!("Failed to fetch User Ops: {:?}", e);
+        Err(e) => Err(anyhow!("Fetch user ops failed with {}", e))
+    }
+}
+
+async fn fetch_accounts(start_time: Option<DateTime<Utc>>, end_time: Option<DateTime<Utc>>) -> Result<Vec<Account>, anyhow::Error> {
+    info!("🔹 Fetching accounts");
+
+    // Make API call with parameters
+    match fetch_json(ACCOUNTS_QUERY_URL, start_time, end_time).await {
+        Ok(data) => {
+            // Extract "items" field and deserialize into Vec<Accounts>
+            if let Some(items) = data.get("items") {
+                let accounts: Vec<Account> = serde_json::from_value(items.clone())
+                    .map_err(|e| anyhow!("Failed to deserialize accounts: {}", e))?;
+                Ok(accounts)
+            } else {
+                error!("Unexpected response");
+                Err(anyhow!("Unexpected response"))
+            }
         },
-        Err(err) => {
-            error!("🚨 JSON-RPC request failed: {:?}", err);
-            Err(anyhow!("JSON-RPC request error: {:?}", err))
-        }
+        Err(e) => Err(anyhow!("Fetch user ops failed with {}", e))
     }
 }
 
-pub fn parse_sender_from_topics(topics: &Vec<String>) -> Result<String> {
-    if topics.len() < 3 {
-        return Err(anyhow!("Expected at least 3 topics, got {}", topics.len()));
-    }
-
-    let topic = &topics[2];
-
-    // A valid 32-byte hex string (with a "0x" prefix) should be 66 characters.
-    if topic.len() != 66 {
-        return Err(anyhow!(
-            "Unexpected topic length: expected 66 characters, got {} for topic: {}",
-            topic.len(),
-            topic
-        ));
-    }
-
-    // Extract the last 40 characters.
-    // Since the string starts with "0x", the actual data is from index 2 to 66.
-    // The first 24 hex characters (indices 2..26) are usually padding zeros,
-    // and the actual address is in indices 26..66.
-    let sender = &topic[26..66];
-
-    // Return the sender address with a "0x" prefix.
-    Ok(format!("0x{}", sender))
-}
-
-/// Parses the gas used (actualGasCost) from the event data.
-/// 
-/// # Arguments
-/// 
-/// * `data` - A hex string (with a "0x" prefix) containing the ABI‑encoded non‑indexed event parameters.
-/// 
-/// # Returns
-/// 
-/// A `Result<u64>` containing the parsed gas used.  
-/// 
-/// # Example
-/// 
-/// If `data` is something like:
-/// "0x{nonce}{gasCost}{actualGasPrice}..."
-/// where each of `{nonce}` and `{gasCost}` are 64 hex characters,
-/// this function extracts the second 64‑character block as gas used.
-pub fn parse_gas_used_from_data(data: &str) -> Result<u64> {
-    // Remove the "0x" prefix, if present.
-    let trimmed = data.trim_start_matches("0x");
-
-    // Ensure the string is long enough to contain at least two 32-byte values.
-    if trimmed.len() < 128 {
-        return Err(anyhow!(
-            "Data is too short: expected at least 128 hex digits, got {} in '{}'",
-            trimmed.len(),
-            data
-        ));
-    }
-
-    // The first 64 hex digits are for the nonce; the next 64 are for actualGasCost.
-    let gas_used_hex = &trimmed[64..128];
-
-    // Parse the gas_used_hex as a hexadecimal number into u64.
-    // (Typically, gas cost values are well below 2^64.)
-    let gas_used = u64::from_str_radix(gas_used_hex, 16)
-        .map_err(|e| anyhow!("Error parsing gas used from '{}': {}", gas_used_hex, e))?;
-
-    Ok(gas_used)
-}
-
-pub async fn insert_user_operation(db_pool: &DbPool, log: &EthLog) -> Result<()> {
-    // decode fields
-    let block_num = parse_u64_from_hex(&log.block_number).unwrap();
-    let sender = parse_sender_from_topics(&log.topics).unwrap(); // e.g. topics[2]
-    let gas_used = parse_gas_used_from_data(&log.data).unwrap(); // depends on the event
-    info!("🔹 user op {}, {}, {}", &sender, gas_used, block_num);
-
-    // insert user op
-    sqlx::query(r#"
-            INSERT INTO user_ops (sender, block_number, transaction_hash, gas_used)
-            VALUES ($1, $2, $3, $4)
-        "#
-    )
-    .bind(sender)                       // Bind the sender address (String)
-    .bind(PgU64::from_u64(block_num).to_i64())             // Bind the block number
-    .bind(&log.transaction_hash)        // Bind the transaction hash (String)
-    .bind(PgU64::from_u64(gas_used).to_i64())
-    .execute(db_pool)
-    .await?;
-
-    Ok(())
-}
-
-async fn save_last_processed_block(db_pool: &DbPool, block_num: u64) -> Result<()> {
-    sqlx::query(r#"
-            UPDATE indexer_state 
-            SET last_processed_block = $1
-            WHERE id = 1
-            "#
-    )
-    .bind(PgU64::new(block_num).to_i64())   // Bind the block numbder
-    .execute(db_pool)
-    .await?;
-
-    Ok(())
-}
-
-pub async fn get_usage_stats(state: SharedUsageStats, handle: UsageMonitorHandle) -> Json<UsageStats> {
+pub async fn get_usage_stats(state: SharedUsageStats) -> Json<UsageStats> {
     let data = state.lock().await.clone();
     Json(data)
 }
@@ -495,7 +396,7 @@ pub fn get_mock_usage_stats() -> UsageStats {
     unique_active_accounts.insert("YTD".to_string(), 3200u64);
 
     stats.insert("User ops".to_string(), user_ops);
-    stats.insert("Total gas".to_string(), gas_used);
+    stats.insert("Gas used".to_string(), gas_used);
     stats.insert("Unique active accounts".to_string(), unique_active_accounts);
 
     let mut sel_accounts = HashMap::new();

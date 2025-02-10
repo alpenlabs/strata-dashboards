@@ -1,9 +1,7 @@
 mod config;
 mod wallets;
 mod utils;
-mod db;
 mod usage;
-mod pgu64;
 
 use axum::{routing::get, Json, Router};
 use log::info;
@@ -20,9 +18,8 @@ use config::Config;
 use crate::wallets::{ SharedWallets, fetch_balances_task, get_wallets_with_balances, init_paymaster_wallets};
 use crate::utils::create_rpc_client;
 use crate::usage::{
-    UsageMonitorConfig,
-    init_usage_monitor,
-    usage_indexer_task,
+    usage_monitoring_task,
+    get_initial_stats,
     get_mock_usage_stats,
     get_usage_stats
 };
@@ -148,23 +145,23 @@ async fn main() {
     }
     );
 
-    let usage_monitor_config = UsageMonitorConfig::new();
-    let usage_monitor_handle = init_usage_monitor(&usage_monitor_config).await.unwrap();
-    let um_handle_clone = usage_monitor_handle.clone();
+    let usage_stats = get_initial_stats();
+    // 🔹 Shared state for usage stats
+    let shared_usage_stats = Arc::new(Mutex::new(usage_stats));
     tokio::spawn(
         {
+            let usage_stats_clone = Arc::clone(&shared_usage_stats);
             async move {
-                usage_indexer_task(um_handle_clone).await;
+                usage_monitoring_task(usage_stats_clone).await;
             }
         });
 
-    let usage_stats = get_mock_usage_stats();
-    // 🔹 Shared state for usage stats
-    let shared_usage_stats = Arc::new(Mutex::new(usage_stats));
+    // usage_stats = get_mock_usage_stats();
+    // let shared_usage_stats = Arc::new(Mutex::new(usage_stats));
     let app = Router::new()
         .route("/api/status", get(move || get_network_status(Arc::clone(&shared_state))))
         .route("/api/balances", get(move || get_wallets_with_balances( paymaster_wallets)))
-        .route("/api/usage_stats", get(move || get_usage_stats(Arc::clone(&shared_usage_stats), usage_monitor_handle)))
+        .route("/api/usage_stats", get(move || get_usage_stats(Arc::clone(&shared_usage_stats))))
         .layer(cors);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));

@@ -1,4 +1,4 @@
-import { Suspense, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { useUsageStats } from "../hooks/useUsageStats.ts";
   
@@ -27,15 +27,14 @@ const TimePeriodTabs: React.FC<TimePeriodTabsProps> = ({ timePeriods, selectedPe
 export default function Usage() {
     const { pathname } = useLocation(); // Get current URL path
     const { data, isLoading, error } = useUsageStats();
+    const timePeriods = ["24h", "30d", "YTD"];
     if (isLoading) return <p className="loading-text">Loading...</p>
     if (error || !data) return <p className="error-text">Error loading data</p>
 
+    console.log(data);
     const [statPeriods, setStatPeriods] = useState<Record<string, string>>({});
     useEffect(() => {
         const statNames = Object.keys(data.stats);
-        const firstStatName = statNames[0];
-        const timePeriods = Object.keys(data.stats[firstStatName]);
-
         const defaultStatPeriods: Record<string, string> = {};
         statNames.forEach((stat) => {
             defaultStatPeriods[stat] = timePeriods[0]; // Default to first available time period
@@ -60,7 +59,7 @@ export default function Usage() {
                             <section key={statName} className="usage-section">
                                 <text className="usage-title">{statName}</text> {/* Format title */}
                                 <TimePeriodTabs
-                                    timePeriods={Object.keys(data.stats[statName])}
+                                    timePeriods={timePeriods}
                                     selectedPeriod={statPeriods[statName]}
                                     setSelectedPeriod={(period) =>
                                         setStatPeriods((prev) => ({ ...prev, [statName]: period }))
