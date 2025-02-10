@@ -102,11 +102,11 @@ pub fn get_initial_stats() -> UsageStats {
 
 /// Periodically fetch user operations and accounts and compute usage stats
 pub async fn usage_monitoring_task(shared_stats: SharedUsageStats) {
-    // info!("Fetching balances...");
-    let mut interval = interval(tokio::time::Duration::from_secs(100));
+    let mut interval = interval(tokio::time::Duration::from_secs(120));
 
     loop {
         interval.tick().await;
+        info!("🔹 Refresing usage stats...");
         let now = Utc::now();
         let max_days = max_days_to_monitor(now);
         let start_time = now.checked_sub_days(Days::new(max_days));
@@ -226,9 +226,7 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats) {
 }
 
 fn max_days_to_monitor(now: DateTime<Utc>) -> u64 {
-    let ytd_start = Utc.with_ymd_and_hms(now.year(), 1, 1, 0, 0, 0);
-    let ytd_days = now.day() as u64 - ytd_start.unwrap().day() as u64;
-
+    let ytd_days = now.ordinal() as u64;
     if ytd_days > 30 {
         ytd_days
     } else {

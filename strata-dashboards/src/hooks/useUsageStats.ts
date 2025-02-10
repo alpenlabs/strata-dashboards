@@ -24,6 +24,6 @@ export const useUsageStats = () => {
     return useQuery({
         queryKey: ["usageStats"],
         queryFn: fetchUsageStats,
-        refetchInterval: 60000, // ✅ Auto-refetch every 60s
+        refetchInterval: 120000, // ✅ Auto-refetch every 60s
     });
 };

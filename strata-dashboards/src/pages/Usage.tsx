@@ -27,6 +27,7 @@ const TimePeriodTabs: React.FC<TimePeriodTabsProps> = ({ timePeriods, selectedPe
 export default function Usage() {
     const { pathname } = useLocation(); // Get current URL path
     const { data, isLoading, error } = useUsageStats();
+    const aggrStats = ["User ops", "Gas used", "Unique active accounts"];
     const timePeriods = ["24h", "30d", "YTD"];
     if (isLoading) return <p className="loading-text">Loading...</p>
     if (error || !data) return <p className="error-text">Error loading data</p>
@@ -34,9 +35,8 @@ export default function Usage() {
     console.log(data);
     const [statPeriods, setStatPeriods] = useState<Record<string, string>>({});
     useEffect(() => {
-        const statNames = Object.keys(data.stats);
         const defaultStatPeriods: Record<string, string> = {};
-        statNames.forEach((stat) => {
+        aggrStats.forEach((stat) => {
             defaultStatPeriods[stat] = timePeriods[0]; // Default to first available time period
         });
 
@@ -55,7 +55,7 @@ export default function Usage() {
             {pathname === "/usage" && (
                 <div className="usage-container">
                     <div className="usage-cards">
-                        {Object.keys(data.stats).map((statName) => (
+                        {aggrStats.map((statName) => (
                             <section key={statName} className="usage-section">
                                 <text className="usage-title">{statName}</text> {/* Format title */}
                                 <TimePeriodTabs
