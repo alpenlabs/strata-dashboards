@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, collections::HashMap, collections::HashSet};
-use chrono::{Utc, DateTime, TimeZone, Duration, Days, Datelike};
+use chrono::{Utc, DateTime, Duration, Datelike};
 use axum::Json;
 use serde_json::Value;
 use serde::de::{self, Deserializer};
@@ -105,12 +105,16 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats) {
         interval.tick().await;
         info!("🔹 Refresing usage stats...");
         let now = Utc::now();
-        let max_days = max_days_to_monitor(now);
-        let mut start_time = now.checked_sub_days(Days::new(max_days));
-        if max_days > 30 {
-            start_time = Some(Utc.with_ymd_and_hms(now.year(), 1, 1, 0, 0, 0).unwrap());
-        }
 
+        // Determine the start_time based on maximum time delta needed for stats
+        let duration_30d = now - Duration::days(30);
+        let duration_ytd = now - Duration::days(now.ordinal() as i64);
+        let mut max_time_delta = now - duration_ytd;
+        if now - duration_30d < max_time_delta {
+            max_time_delta = now - duration_30d;
+        }
+ 
+        let start_time = now.checked_sub_signed(max_time_delta);
         let mut locked_stats = shared_stats.lock().await;
         let result = fetch_user_ops(start_time, Some(now)).await;
 
@@ -223,15 +227,6 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats) {
         locked_stats.sel_accounts.entry("Top gas consumers".to_string())
             .or_default()
             .insert("24h".to_string(), top_gas_consumers);
-    }
-}
-
-fn max_days_to_monitor(now: DateTime<Utc>) -> u64 {
-    let ytd_days = now.ordinal() as u64;
-    if ytd_days > 30 {
-        ytd_days
-    } else {
-        30
     }
 }
 
