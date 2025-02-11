@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, collections::HashMap, collections::HashSet};
-use chrono::{Utc, DateTime, Duration, Datelike};
+use chrono::{Utc, DateTime, TimeZone, Duration, Datelike};
 use axum::Json;
 use serde_json::Value;
 use serde::de::{self, Deserializer};
@@ -106,17 +106,16 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats) {
         info!("🔹 Refresing usage stats...");
         let now = Utc::now();
 
-        // Determine the start_time based on maximum time delta needed for stats
-        let duration_30d = now - Duration::days(30);
-        let duration_ytd = now - Duration::days(now.ordinal() as i64);
-        let mut max_time_delta = now - duration_ytd;
-        if now - duration_30d < max_time_delta {
-            max_time_delta = now - duration_30d;
+        // Determine the start_time for stats
+        let time_30d_earlier = now - Duration::days(30);
+        let mut start_time = Utc.with_ymd_and_hms(now.year(), 1, 1, 0, 0, 0).unwrap();
+        if time_30d_earlier < start_time {
+            start_time = time_30d_earlier;
         }
- 
-        let start_time = now.checked_sub_signed(max_time_delta);
+
+        info!("start_time {}", start_time);
         let mut locked_stats = shared_stats.lock().await;
-        let result = fetch_user_ops(start_time, Some(now)).await;
+        let result = fetch_user_ops(start_time, now).await;
 
         // Aggregate gas used per sender (in the last 24 hours)
         let mut gas_usage: HashMap<String, u64> = HashMap::new();
@@ -176,7 +175,7 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats) {
             }
         }
 
-        let result = fetch_accounts(start_time, Some(now)).await;
+        let result = fetch_accounts(start_time, now).await;
         match result {
             Ok(accounts) => {
                 info!("🔹 accounts count {}", accounts.len());
@@ -267,23 +266,20 @@ where
     }
 }
 
-async fn fetch_json(endpoint: &str, start_time: Option<DateTime<Utc>>, end_time: Option<DateTime<Utc>>) 
+async fn fetch_json(endpoint: &str, start_time: DateTime<Utc>, end_time: DateTime<Utc>) 
     -> Result<serde_json::Value, anyhow::Error> {
 
     let http_client = reqwest::Client::new();
 
+     // Format to YYYY-MM-DD HH:MM:SS
     let format_time = |time: DateTime<Utc>| -> String {
-        time.format("%Y-%m-%d %H:%M:%S").to_string() // Correct format: YYYY-MM-DDHH:MM:SS
+        time.format("%Y-%m-%d %H:%M:%S").to_string()
     };
 
     // ✅ Construct query parameters, only adding Some(_) values
     let mut query_params: HashMap<&str, String> = HashMap::new();
-    if let Some(start) = start_time {
-        query_params.insert("start_time", format_time(start));
-    }
-    if let Some(end) = end_time {
-        query_params.insert("end_time", format_time(end));
-    }
+    query_params.insert("start_time", format_time(start_time));
+    query_params.insert("end_time", format_time(end_time));
 
     // ✅ Send request with query parameters (browser-like format)
     let response = http_client
@@ -298,7 +294,7 @@ async fn fetch_json(endpoint: &str, start_time: Option<DateTime<Utc>>, end_time:
     Ok(response)
 }
 
-async fn fetch_user_ops(start_time: Option<DateTime<Utc>>, end_time: Option<DateTime<Utc>>) -> Result<Vec<UserOp>, anyhow::Error> {
+async fn fetch_user_ops(start_time: DateTime<Utc>, end_time: DateTime<Utc>) -> Result<Vec<UserOp>, anyhow::Error> {
     info!("🔹 Fetching user operations");
 
     // Make API call with parameters
@@ -319,7 +315,7 @@ async fn fetch_user_ops(start_time: Option<DateTime<Utc>>, end_time: Option<Date
     }
 }
 
-async fn fetch_accounts(start_time: Option<DateTime<Utc>>, end_time: Option<DateTime<Utc>>) -> Result<Vec<Account>, anyhow::Error> {
+async fn fetch_accounts(start_time: DateTime<Utc>, end_time: DateTime<Utc>) -> Result<Vec<Account>, anyhow::Error> {
     info!("🔹 Fetching accounts");
 
     // Make API call with parameters
