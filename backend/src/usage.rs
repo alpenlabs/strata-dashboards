@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::{sync::Arc, collections::HashMap, collections::HashSet};
 use chrono::{Utc, DateTime, TimeZone, Duration, Days, Datelike};
 use axum::Json;
-use serde_json::{json, Value};
+use serde_json::Value;
 use serde::de::{self, Deserializer};
 use tokio::{sync::Mutex, time::interval};
 use anyhow::{Result, anyhow};
@@ -17,8 +17,8 @@ struct Account {
     #[serde(deserialize_with = "get_address_hash")]
     address: String,
 
-    #[serde(rename = "creation_timestamp", deserialize_with = "from_null_or_string")]
-    deployed_at: String, // ISO 8601 formatted timestamp
+    #[serde(deserialize_with = "from_null_or_string")]
+    creation_timestamp: String, // ISO 8601 formatted timestamp
 
     #[serde(default)]
     gas_used: u64,
@@ -33,7 +33,6 @@ struct UserOp {
     #[serde(deserialize_with = "convert_to_u64")]
     gas_used: u64,
 
-    #[serde(rename = "timestamp")]
     timestamp: String,
 }
 
@@ -180,15 +179,15 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats) {
                 // Sort accounts by creation_timestamp (most recent first)
                 let mut sorted_accounts: Vec<Account> = accounts
                     .iter()
-                    .filter(|acc| acc.deployed_at != "".to_string()) // Ignore accounts without a timestamp
+                    .filter(|acc| acc.creation_timestamp != "".to_string()) // Ignore accounts without a timestamp
                     .cloned()
                     .collect();
 
                 sorted_accounts.sort_by(|a, b| {
-                    let a_time = DateTime::parse_from_rfc3339(&a.deployed_at.as_str())
+                    let a_time = DateTime::parse_from_rfc3339(&a.creation_timestamp.as_str())
                         .map(|dt| dt.with_timezone(&Utc))
                         .unwrap_or(Utc::now()); // Default to now if parsing fails
-                    let b_time = DateTime::parse_from_rfc3339(b.deployed_at.as_str())
+                    let b_time = DateTime::parse_from_rfc3339(b.creation_timestamp.as_str())
                         .map(|dt| dt.with_timezone(&Utc))
                         .unwrap_or(Utc::now()); 
 
@@ -213,7 +212,7 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats) {
         let gas_usage_clone = gas_usage.clone();
         let mut top_gas_consumers: Vec<Account> = gas_usage_clone
             .into_iter()
-            .map(|(address, gas_used)| Account { address, deployed_at: "".to_string(), gas_used })
+            .map(|(address, gas_used)| Account { address, creation_timestamp: "".to_string(), gas_used })
             .collect();
 
         top_gas_consumers.sort_by_key(|acc| gas_usage.get(&acc.address).cloned().unwrap_or(0));
@@ -277,10 +276,6 @@ async fn fetch_json(endpoint: &str, start_time: Option<DateTime<Utc>>, end_time:
     -> Result<serde_json::Value, anyhow::Error> {
 
     let http_client = reqwest::Client::new();
-
-    // Construct JSON parameters
-    let mut params = json!({
-    });
 
     let format_time = |time: DateTime<Utc>| -> String {
         time.format("%Y-%m-%d %H:%M:%S").to_string() // Correct format: YYYY-MM-DDHH:MM:SS

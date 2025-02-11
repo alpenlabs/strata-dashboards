@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 export type Account = {
     address: string,
-    deployed_at: string,
+    creation_timestamp: string,
     gas_used: string,
 }
 

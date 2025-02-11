@@ -29,10 +29,7 @@ export default function Usage() {
     const { data, isLoading, error } = useUsageStats();
     const aggrStats = ["User ops", "Gas used", "Unique active accounts"];
     const timePeriods = ["24h", "30d", "YTD"];
-    if (isLoading) return <p className="loading-text">Loading...</p>
-    if (error || !data) return <p className="error-text">Error loading data</p>
 
-    console.log(data);
     const [statPeriods, setStatPeriods] = useState<Record<string, string>>({});
     useEffect(() => {
         const defaultStatPeriods: Record<string, string> = {};
@@ -43,11 +40,14 @@ export default function Usage() {
         setStatPeriods(defaultStatPeriods);
     }, [data]); // Ensures this only runs when `data` updates
 
+
+    if (isLoading) return <p className="loading-text">Loading...</p>
+    if (error || !data) return <p className="error-text">Error loading data</p>
+
+    console.log(data);
     // Sort recent accounts by timestamp and top gas consumers by gas used
-    const recent_accounts = data.sel_accounts["Recent accounts"]["recent"].sort((a, b) => 
-        Number(b.deployed_at) - Number(a.deployed_at));
-    const top_gas_consumers = data.sel_accounts["Top gas consumers"]["24h"].sort((a, b) => 
-        Number(b.gas_used) - Number(a.gas_used));
+    const recent_accounts = data.sel_accounts["Recent accounts"]["recent"];
+    const top_gas_consumers = data.sel_accounts["Top gas consumers"]["24h"];
 
     return (
         <div className="usage-content">
@@ -80,7 +80,7 @@ export default function Usage() {
                                     <li key={index} className="account-item">
                                         <span className="account-address">{account.address}</span>
                                         <span className="account-detail">
-                                            Deployed: {new Date(account.deployed_at).toLocaleString()}
+                                            Deployed: {new Date(account.creation_timestamp).toLocaleString()}
                                         </span>
                                     </li>
                                 ))}
