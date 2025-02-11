@@ -75,7 +75,7 @@ async fn check_bundler_health(client: &reqwest::Client, config: &Config) -> Stat
 /// Periodically fetches real statuses
 async fn fetch_statuses_task(state: SharedState, config: &Config) {
     info!("Fetching statuses...");
-    let mut interval = interval(Duration::from_secs(100));
+    let mut interval = interval(Duration::from_secs(10));
     let rpc_client = create_rpc_client(&config.rpc_url());
     let http_client = reqwest::Client::new();
 
@@ -132,7 +132,7 @@ async fn main() {
     {
         let config = Arc::clone(&config);
         async move {
-            fetch_statuses_task(state_clone, &config).await;
+        fetch_statuses_task(state_clone, &config).await;
         }
     });
     tokio::spawn(

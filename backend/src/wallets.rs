@@ -60,7 +60,7 @@ impl PaymasterWallets {
 
 /// Periodically fetches wallet balances
 pub async fn fetch_balances_task(wallets: SharedWallets, config: &Config) {
-    // info!("Fetching balances...");
+    info!("Fetching balances...");
     let mut interval = interval(Duration::from_secs(100));
     let rpc_client = create_rpc_client(&config.reth_url());
 
@@ -77,13 +77,13 @@ pub async fn fetch_balances_task(wallets: SharedWallets, config: &Config) {
         let balance_val = fetch_wallet_balance(&rpc_client, &validating_wallet.address).await;
         validating_wallet.update_balance(balance_val.clone().unwrap_or_else(|| "0".to_string()));
 
-        // info!("✅ Updated Balances: {:?}, {:?}", balance_dep.unwrap(), balance_val.unwrap());
+        info!("✅ Updated Balances: {:?}, {:?}", balance_dep.unwrap(), balance_val.unwrap());
     }
 }
 
 /// Fetches the ETH balance of a given wallet address in Wei (integer)
 pub async fn fetch_wallet_balance(client: &HttpClient, wallet_address: &str) -> Option<String> {
-    // info!("🔹 Fetching balance for wallet: {}", wallet_address);
+    info!("🔹 Fetching balance for wallet: {}", wallet_address);
 
     let params = (wallet_address, "latest");  // ✅ Use a tuple instead of `serde_json::Value`
     let response: Result<serde_json::Value, _> = client.request("eth_getBalance", params).await;
