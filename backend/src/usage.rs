@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, collections::HashMap, collections::HashSet};
-use chrono::{Utc, DateTime, Duration, Days, Datelike};
+use chrono::{Utc, DateTime, TimeZone, Duration, Days, Datelike};
 use axum::Json;
 use serde_json::{json, Value};
 use serde::de::{self, Deserializer};
@@ -107,7 +107,11 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats) {
         info!("🔹 Refresing usage stats...");
         let now = Utc::now();
         let max_days = max_days_to_monitor(now);
-        let start_time = now.checked_sub_days(Days::new(max_days));
+        let mut start_time = now.checked_sub_days(Days::new(max_days));
+        if max_days > 30 {
+            start_time = Some(Utc.with_ymd_and_hms(now.year(), 1, 1, 0, 0, 0).unwrap());
+        }
+
         let mut locked_stats = shared_stats.lock().await;
         let result = fetch_user_ops(start_time, Some(now)).await;
 
@@ -279,25 +283,26 @@ async fn fetch_json(endpoint: &str, start_time: Option<DateTime<Utc>>, end_time:
     });
 
     let format_time = |time: DateTime<Utc>| -> String {
-        time.format("%Y-%m-%d%H:%M:%S").to_string() // Correct format: YYYY-MM-DDHH:MM:SS
+        time.format("%Y-%m-%d %H:%M:%S").to_string() // Correct format: YYYY-MM-DDHH:MM:SS
     };
 
-    if let Some(start_ts) = start_time {
-        params["start_time"] = json!(&format_time(start_ts));
+    // ✅ Construct query parameters, only adding Some(_) values
+    let mut query_params: HashMap<&str, String> = HashMap::new();
+    if let Some(start) = start_time {
+        query_params.insert("start_time", format_time(start));
     }
-    if let Some(end_ts) = end_time {
-        params["end_time"] = json!(&format_time(end_ts));
+    if let Some(end) = end_time {
+        query_params.insert("end_time", format_time(end));
     }
 
-    info!("Sending request to: {} with query params {:?}", endpoint, params);
-    // Make an HTTP POST request
+    // ✅ Send request with query parameters (browser-like format)
     let response = http_client
         .get(endpoint)
-        .json(&params)
+        .query(&query_params) // Use query parameters instead of JSON body
         .send()
         .await?
         .error_for_status()? // Converts HTTP errors into Rust errors
-        .json::<Value>()
+        .json::<serde_json::Value>()
         .await?;
 
     Ok(response)
