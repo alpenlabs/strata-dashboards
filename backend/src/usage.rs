@@ -79,7 +79,7 @@ pub struct UsageMonitoringConfig {
     user_ops_query_url: String,
     accounts_query_url: String,
     usage_stats_keys: UsageStatsKeys,
-    stats_refetch_interval: u64,
+    stats_refetch_interval_s: u64,
 }
 
 impl UsageMonitoringConfig {
@@ -94,9 +94,9 @@ impl UsageMonitoringConfig {
         let accounts_query_url = env::var("ACCOUNTS_QUERY_URL").ok()
             .unwrap_or_else(|| "http://localhost/api/v2/proxy/account-abstraction/accounts".to_string());
 
-        let refresh_interval = env::var("USAGE_STATS_BACKEND_REFETCH_INTERVAL").ok()
+        let refresh_interval_s = env::var("USAGE_STATS_BACKEND_REFETCH_INTERVAL_S").ok()
             .unwrap_or_else(|| "120000".to_string());
-        let refetch_interval_u64: u64 = refresh_interval.parse().expect("Failed to parse MY_NUMBER as u64");
+        let refetch_interval_s_u64: u64 = refresh_interval_s.parse().expect("Failed to parse MY_NUMBER as u64");
 
         let usage_stats_keys = UsageMonitoringConfig::load_usage_keys();
 
@@ -104,7 +104,7 @@ impl UsageMonitoringConfig {
             user_ops_query_url,
             accounts_query_url,
             usage_stats_keys,
-            stats_refetch_interval: refetch_interval_u64,
+            stats_refetch_interval_s: refetch_interval_s_u64,
         }
     }
 
@@ -112,7 +112,6 @@ impl UsageMonitoringConfig {
     fn load_usage_keys() -> UsageStatsKeys {
         // Path relative to backend
         let data = fs::read_to_string("../usage_keys.json").expect("Unable to read file");
-        info!("json data {}", data);
         serde_json::from_str(&data).expect("JSON parsing failed")
     }
 }
@@ -184,7 +183,7 @@ type AccountsGasUsage = HashMap<String, u64>;
 
 /// Periodically fetch user operations and accounts and compute usage stats
 pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &UsageMonitoringConfig) {
-    let mut interval = interval(tokio::time::Duration::from_secs(config.stats_refetch_interval));
+    let mut interval = interval(tokio::time::Duration::from_secs(config.stats_refetch_interval_s));
 
     loop {
         interval.tick().await;

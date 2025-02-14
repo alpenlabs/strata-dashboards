@@ -46,7 +46,6 @@ export default function Usage() {
 
     useEffect(() => {
         loadUsageKeys().then((keys) => {
-            console.log(keys);
             setUsageStatNames(Object.values(keys.usage_stat_names));
             setTimeWindows(Object.values(keys.time_windows));
             setSelectAccountsBy(Object.entries(keys.select_accounts_by).map(([key, value]) => ({ key, value })));
@@ -79,7 +78,7 @@ export default function Usage() {
                             <div className="usage-cards">
                                 {statsNames.map((statName) => (
                                     <section key={statName} className="usage-section">
-                                        <text className="usage-title">{statName}</text>
+                                        <span className="usage-title">{statName}</span>
                                         <TimePeriodTabs
                                             timePeriods={timeWindows}
                                             selectedPeriod={statPeriods[statName]}
@@ -98,7 +97,7 @@ export default function Usage() {
                                 const accounts = data?.selected_accounts[value] ?? []
                                 return (
                                     <section key={value} className="accounts-section">
-                                        <text className="usage-title">{value}</text>
+                                        <span className="usage-title">{value}</span>
                                         {accounts.length > 0 ? (
                                             <ul className="account-list">
                                                 {accounts.map((account, index) => (

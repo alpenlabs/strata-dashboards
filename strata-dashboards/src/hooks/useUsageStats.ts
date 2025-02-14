@@ -12,8 +12,8 @@ export type UsageStats = {
 };
 
 const API_BASE_URL = import.meta.env.API_BASE_URL || "http://localhost:3000";
-// Default 120000 (2 minutes)
-const REFETCH_INTERVAL = parseInt(import.meta.env.USAGE_STATS_FRONTEND_REFETCH_INTERVAL) || 120;
+const REFETCH_INTERVAL_S = parseInt(import.meta.env.VITE_USAGE_STATS_REFETCH_INTERVAL_S) || 120;
+console.log(REFETCH_INTERVAL_S);
 const fetchUsageStats = async (): Promise<UsageStats> => {
     const response = await fetch(`${API_BASE_URL}/api/usage_stats`);
     if (!response.ok) {
@@ -26,7 +26,6 @@ export const useUsageStats = () => {
     return useQuery({
         queryKey: ["usageStats"],
         queryFn: fetchUsageStats,
-        // REFETCH_INTERVAL is in seconds
-        refetchInterval: REFETCH_INTERVAL * 1000,
+        refetchInterval: REFETCH_INTERVAL_S * 1000,
     });
 };
