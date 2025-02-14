@@ -18,8 +18,9 @@ use config::Config;
 use crate::wallets::{ SharedWallets, fetch_balances_task, get_wallets_with_balances, init_paymaster_wallets};
 use crate::utils::create_rpc_client;
 use crate::usage::{
+    UsageMonitoringConfig,
+    UsageStats,
     usage_monitoring_task,
-    get_initial_stats,
     get_usage_stats
 };
 
@@ -144,16 +145,17 @@ async fn main() {
     }
     );
 
-    let usage_stats = get_initial_stats();
+    let usage_monitoring_config = UsageMonitoringConfig::new();
+    let usage_stats = UsageStats::default(&usage_monitoring_config);
     // 🔹 Shared state for usage stats
     let shared_usage_stats = Arc::new(Mutex::new(usage_stats));
     tokio::spawn(
-        {
-            let usage_stats_clone = Arc::clone(&shared_usage_stats);
-            async move {
-                usage_monitoring_task(usage_stats_clone).await;
-            }
-        });
+    {
+        let usage_stats_clone = Arc::clone(&shared_usage_stats);
+        async move {
+            usage_monitoring_task(usage_stats_clone, &usage_monitoring_config).await;
+        }
+    });
 
     // usage_stats = get_mock_usage_stats();
     // let shared_usage_stats = Arc::new(Mutex::new(usage_stats));

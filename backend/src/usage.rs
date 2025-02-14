@@ -1,6 +1,19 @@
 use serde::{Deserialize, Serialize};
-use std::{sync::Arc, collections::HashMap, collections::HashSet};
-use chrono::{Utc, DateTime, TimeZone, Duration, Datelike};
+use dotenvy::dotenv;
+use std::{
+    fs,
+    env,
+    sync::Arc,
+    collections::HashMap,
+    collections::HashSet
+};
+use chrono::{
+    Utc,
+    DateTime,
+    TimeZone,
+    Duration,
+    Datelike
+};
 use axum::Json;
 use serde_json::Value;
 use serde::de::{self, Deserializer};
@@ -8,9 +21,101 @@ use tokio::{sync::Mutex, time::interval};
 use anyhow::{Result, anyhow};
 use log::{info, error};
 
-const USER_OPS_QUERY_URL: &str = "http://localhost/api/v2/proxy/account-abstraction/operations";
-const ACCOUNTS_QUERY_URL: &str = "http://localhost/api/v2/proxy/account-abstraction/accounts";
+/// Enum for usage statistics
+#[derive(Debug, Eq, PartialEq, Hash, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum UsageStatName {
+    #[serde(rename = "USAGE_STATS__USER_OPS")]
+    UserOps,
+    #[serde(rename = "USAGE_STATS__GAS_USED")]
+    GasUsed,
+    #[serde(rename = "USAGE_STATS__UNIQUE_ACTIVE_ACCOUNTS")]
+    UniqueActiveAccounts,
+}
 
+/// Enum for time windows
+#[derive(Debug, Eq, PartialEq, Hash, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum TimeWindow {
+    #[serde(rename = "TIME_WINDOW__LAST_24_HOURS")]
+    Last24Hours,
+    #[serde(rename = "TIME_WINDOW__LAST_30_DAYS")]
+    Last30Days,
+    #[serde(rename = "TIME_WINDOW__YEAR_TO_DATE")]
+    YearToDate,
+}
+
+impl TimeWindow {
+    fn to_duration(&self, now: DateTime<Utc>) -> Duration {
+        match self {
+            TimeWindow::Last24Hours => Duration::days(1),
+            TimeWindow::Last30Days => Duration::days(30),
+            TimeWindow::YearToDate => {
+                Duration::days(now.ordinal() as i64) // Days since Jan 1st
+            }
+        }
+    }
+}
+
+/// Enum for account selection criteria
+#[derive(Debug, Eq, PartialEq, Hash, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum SelectAccountsBy {
+    #[serde(rename = "ACCOUNTS__RECENT")]
+    Recent,
+    #[serde(rename = "ACCOUNTS__TOP_GAS_CONSUMERS_24H")]
+    TopGasConsumers24h,
+}
+
+/// Struct for holding parsed JSON
+#[derive(Debug, PartialEq, Deserialize)]
+struct UsageStatsKeys {
+    usage_stat_names: HashMap<UsageStatName, String>,
+    time_windows: HashMap<TimeWindow, String>,
+    select_accounts_by: HashMap<SelectAccountsBy, String>,
+}
+
+pub struct UsageMonitoringConfig {
+    user_ops_query_url: String,
+    accounts_query_url: String,
+    usage_stats_keys: UsageStatsKeys,
+    stats_refetch_interval: u64,
+}
+
+impl UsageMonitoringConfig {
+    pub fn new() -> Self {
+        dotenv().ok(); // Load `.env` file if present
+
+        let user_ops_query_url = env::var("USER_OPS_QUERY_URL").ok()
+            .unwrap_or_else(|| {
+                "http://localhost/api/v2/proxy/account-abstraction/operations".to_string()
+            });
+
+        let accounts_query_url = env::var("ACCOUNTS_QUERY_URL").ok()
+            .unwrap_or_else(|| "http://localhost/api/v2/proxy/account-abstraction/accounts".to_string());
+
+        let refresh_interval = env::var("USAGE_STATS_BACKEND_REFETCH_INTERVAL").ok()
+            .unwrap_or_else(|| "120000".to_string());
+        let refetch_interval_u64: u64 = refresh_interval.parse().expect("Failed to parse MY_NUMBER as u64");
+
+        let usage_stats_keys = UsageMonitoringConfig::load_usage_keys();
+
+        UsageMonitoringConfig {
+            user_ops_query_url,
+            accounts_query_url,
+            usage_stats_keys,
+            stats_refetch_interval: refetch_interval_u64,
+        }
+    }
+
+    /// Read keys used in reporting usages from a json file.
+    fn load_usage_keys() -> UsageStatsKeys {
+        // Path relative to backend
+        let data = fs::read_to_string("../usage_keys.json").expect("Unable to read file");
+        info!("json data {}", data);
+        serde_json::from_str(&data).expect("JSON parsing failed")
+    }
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct Account {
@@ -38,22 +143,35 @@ struct UserOp {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UsageStats {
-    // First level key is stat (e.g. "User ops", "Gas used").
-    // Second level key is time period ("24h", "30d", "YTD").
+    // Usage stats
+    // First level key is the name of stat. See USAGE_STATS in `usage_keys.json`.
+    // Second level key is time period. See TIME_WINDOWS in `usage_keys.json`.
     stats: HashMap<String, HashMap<String, u64>>,
-    // First level key is stat (e.g. "Recent accounts", "Top gas consumers").
-    // Second level key is time period ("recent", "24h").
-    sel_accounts: HashMap<String, HashMap<String, Vec<Account>>>,
+
+    // Selected accounts: e.g. recently deployed, top gas consumers
+    // First level key is the name of stat. See SELECTED_ACCOUNTS in `usage_keys.json`.
+    selected_accounts: HashMap<String, Vec<Account>>,
 }
 
 impl UsageStats {
-    fn new(
-        stats: HashMap<String, HashMap<String, u64>>,
-        sel_accounts: HashMap<String, HashMap<String, Vec<Account>>>,
-    ) -> Self {
-        Self {
+    pub fn default(config: &UsageMonitoringConfig) -> UsageStats {
+        let mut stats = HashMap::new();
+        for (_, stat_name) in &config.usage_stats_keys.usage_stat_names {
+            let mut stat_values = HashMap::new();
+            for (_, time_window) in &config.usage_stats_keys.time_windows {
+                stat_values.insert(time_window.to_string(), 0u64);
+            }
+            stats.insert(stat_name.to_string(), stat_values);
+        }
+
+        let mut selected_accounts = HashMap::new();
+        for (_, select_by) in &config.usage_stats_keys.select_accounts_by {
+            selected_accounts.insert(select_by.to_string(), Vec::new());
+        }
+
+        UsageStats {
             stats,
-            sel_accounts,
+            selected_accounts,
         }
     }
 }
@@ -61,45 +179,12 @@ impl UsageStats {
 // Shared usage stats
 pub type SharedUsageStats = Arc<Mutex<UsageStats>>;
 
-
-pub fn get_initial_stats() -> UsageStats {
-    let mut stats = HashMap::new();
-
-    let mut user_ops = HashMap::new();
-    user_ops.insert("24h".to_string(), 0u64);
-    user_ops.insert("30d".to_string(), 0u64);
-    user_ops.insert("YTD".to_string(), 0u64);
-
-    let mut gas_used = HashMap::new();
-    gas_used.insert("24h".to_string(), 0u64);
-    gas_used.insert("30d".to_string(), 0u64);
-    gas_used.insert("YTD".to_string(), 0u64);
-
-    let mut unique_active_accounts = HashMap::new();
-    unique_active_accounts.insert("24h".to_string(), 0u64);
-    unique_active_accounts.insert("30d".to_string(), 0u64);
-    unique_active_accounts.insert("YTD".to_string(), 0u64);
-
-    stats.insert("User ops".to_string(), user_ops);
-    stats.insert("Gas used".to_string(), gas_used);
-    stats.insert("Unique active accounts".to_string(), unique_active_accounts);
-
-    let mut sel_accounts = HashMap::new();
-    let mut accounts_created = HashMap::new();
-    accounts_created.insert("recent".to_string(), Vec::new());
-
-    let mut gas_consumers = HashMap::new();
-    gas_consumers.insert("24h".to_string(), Vec::new());
-
-    sel_accounts.insert("Recent accounts".to_string(), accounts_created);
-    sel_accounts.insert("Top gas consumers".to_string(), gas_consumers);
-
-    UsageStats::new(stats, sel_accounts)
-}
+type UniqueAccounts = HashMap<String, HashSet<String>>;
+type AccountsGasUsage = HashMap<String, u64>;
 
 /// Periodically fetch user operations and accounts and compute usage stats
-pub async fn usage_monitoring_task(shared_stats: SharedUsageStats) {
-    let mut interval = interval(tokio::time::Duration::from_secs(120));
+pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &UsageMonitoringConfig) {
+    let mut interval = interval(tokio::time::Duration::from_secs(config.stats_refetch_interval));
 
     loop {
         interval.tick().await;
@@ -115,40 +200,49 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats) {
 
         info!("start_time {}", start_time);
         let mut locked_stats = shared_stats.lock().await;
-        let result = fetch_user_ops(start_time, now).await;
+        let result = fetch_user_ops(&config.user_ops_query_url, start_time, now).await;
 
         // Aggregate gas used per sender (in the last 24 hours)
-        let mut gas_usage: HashMap<String, u64> = HashMap::new();
+        let mut gas_usage: AccountsGasUsage = HashMap::new();
 
         match result {
             Ok(user_ops) => {
                 info!("🔹 user ops count {}", user_ops.len());
-                let time_windows: Vec<(&str, Duration)> = vec![
-                    ("24h", Duration::days(1)),
-                    ("30d", Duration::days(30)),
-                    ("YTD", Duration::days(now.ordinal() as i64)) // Days since Jan 1st
-                ];
+                let time_windows: Vec<(String, Duration)> = config.usage_stats_keys.time_windows
+                    .iter()
+                    .map(|(tw, tw_value)| {
+                        (tw_value.clone(), tw.to_duration(now))
+                    })
+                    .collect();
 
                 // Initialize or reset stats
                 for (period, _) in &time_windows {
-                    locked_stats.stats.entry("User ops".to_string()).or_default().insert(period.to_string(), 0);
-                    locked_stats.stats.entry("Gas used".to_string()).or_default().insert(period.to_string(), 0);
-                    locked_stats.stats.entry("Unique active accounts".to_string()).or_default().insert(period.to_string(), 0);
+                    for (_, stat_name) in &config.usage_stats_keys.usage_stat_names {
+                        locked_stats.stats.entry(stat_name.clone()).or_default().insert(period.to_string(), 0);
+                    }
                 }
 
                 // Create sets to track unique active accounts per period
-                let mut unique_accounts: HashMap<&str, HashSet<String>> = HashMap::new();
+                let mut unique_accounts: UniqueAccounts = HashMap::new();
                 for (period, _) in &time_windows {
-                    unique_accounts.insert(period, HashSet::new());
+                    unique_accounts.insert(period.clone(), HashSet::new());
                 }
 
-                // compute stats for 24h, 30d and YTD
+                // compute stats for each TIME_WINDOW
                 for entry in user_ops {
                     if let Ok(op_time) = DateTime::parse_from_rfc3339(&entry.timestamp).map(|dt| dt.with_timezone(&Utc)) {
                         for (period, duration) in &time_windows {
                             if now - *duration <= op_time {
-                                *locked_stats.stats.entry("User ops".to_string()).or_default().entry(period.to_string()).or_insert(0) += 1;
-                                *locked_stats.stats.entry("Gas used".to_string()).or_default().entry(period.to_string()).or_insert(0) += entry.gas_used;
+                                for (stat_key, stat_name) in &config.usage_stats_keys.usage_stat_names {
+                                    if matches!(stat_key, UsageStatName::UserOps | UsageStatName::GasUsed) {
+                                        *locked_stats
+                                            .stats
+                                            .entry(stat_name.clone()) // Get or insert HashMap entry
+                                            .or_default() // Insert default if missing
+                                            .entry(period.to_string()) // Get nested period entry
+                                            .or_insert(0) += 1; // Increment counter
+                                    }
+                                }
 
                                 // Track unique senders
                                 unique_accounts.get_mut(period).unwrap().insert(entry.sender.clone());
@@ -164,9 +258,12 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats) {
 
                 // Store the count of unique active accounts
                 for (period, accounts_set) in unique_accounts {
-                    locked_stats.stats.entry("Unique active accounts".to_string())
+                    locked_stats
+                        .stats
+                        .entry(config.usage_stats_keys.usage_stat_names[&UsageStatName::UniqueActiveAccounts].clone()) // Use enum variant
                         .or_default()
                         .insert(period.to_string(), accounts_set.len() as u64);
+
                 }
             }
             Err(e) =>
@@ -175,7 +272,7 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats) {
             }
         }
 
-        let result = fetch_accounts(start_time, now).await;
+        let result = fetch_accounts(&config.accounts_query_url, start_time, now).await;
         match result {
             Ok(accounts) => {
                 info!("🔹 accounts count {}", accounts.len());
@@ -201,9 +298,7 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats) {
                 let recent_accounts = sorted_accounts.into_iter().take(5).collect::<Vec<_>>();
 
                 // Store in shared stats
-                locked_stats.sel_accounts.entry("Recent accounts".to_string())
-                    .or_default()
-                    .insert("recent".to_string(), recent_accounts);
+                locked_stats.selected_accounts.insert(config.usage_stats_keys.select_accounts_by[&SelectAccountsBy::Recent].clone(), recent_accounts);
             } 
             Err(e) =>
             {
@@ -223,9 +318,7 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats) {
         top_gas_consumers.truncate(5); // Take top 5
 
         // Store in shared stats
-        locked_stats.sel_accounts.entry("Top gas consumers".to_string())
-            .or_default()
-            .insert("24h".to_string(), top_gas_consumers);
+        locked_stats.selected_accounts.insert(config.usage_stats_keys.select_accounts_by[&SelectAccountsBy::TopGasConsumers24h].clone(), top_gas_consumers);
     }
 }
 
@@ -266,7 +359,7 @@ where
     }
 }
 
-async fn fetch_json(endpoint: &str, start_time: DateTime<Utc>, end_time: DateTime<Utc>) 
+async fn fetch_usage_common(endpoint: &str, start_time: DateTime<Utc>, end_time: DateTime<Utc>) 
     -> Result<serde_json::Value, anyhow::Error> {
 
     let http_client = reqwest::Client::new();
@@ -294,11 +387,11 @@ async fn fetch_json(endpoint: &str, start_time: DateTime<Utc>, end_time: DateTim
     Ok(response)
 }
 
-async fn fetch_user_ops(start_time: DateTime<Utc>, end_time: DateTime<Utc>) -> Result<Vec<UserOp>, anyhow::Error> {
+async fn fetch_user_ops(query_url: &String, start_time: DateTime<Utc>, end_time: DateTime<Utc>) -> Result<Vec<UserOp>, anyhow::Error> {
     info!("🔹 Fetching user operations");
 
     // Make API call with parameters
-    match fetch_json(USER_OPS_QUERY_URL, start_time, end_time).await {
+    match fetch_usage_common(query_url, start_time, end_time).await {
         Ok(data) => {
             // Extract "items" field and deserialize into Vec<UserOps>
             if let Some(items) = data.get("items") {
@@ -315,11 +408,11 @@ async fn fetch_user_ops(start_time: DateTime<Utc>, end_time: DateTime<Utc>) -> R
     }
 }
 
-async fn fetch_accounts(start_time: DateTime<Utc>, end_time: DateTime<Utc>) -> Result<Vec<Account>, anyhow::Error> {
+async fn fetch_accounts(query_url: &String, start_time: DateTime<Utc>, end_time: DateTime<Utc>) -> Result<Vec<Account>, anyhow::Error> {
     info!("🔹 Fetching accounts");
 
     // Make API call with parameters
-    match fetch_json(ACCOUNTS_QUERY_URL, start_time, end_time).await {
+    match fetch_usage_common(query_url, start_time, end_time).await {
         Ok(data) => {
             // Extract "items" field and deserialize into Vec<Accounts>
             if let Some(items) = data.get("items") {
@@ -331,7 +424,7 @@ async fn fetch_accounts(start_time: DateTime<Utc>, end_time: DateTime<Utc>) -> R
                 Err(anyhow!("Unexpected response"))
             }
         },
-        Err(e) => Err(anyhow!("Fetch user ops failed with {}", e))
+        Err(e) => Err(anyhow!("Fetch accounts failed with {}", e))
     }
 }
 
