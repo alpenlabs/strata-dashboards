@@ -94,7 +94,7 @@ impl UsageMonitoringConfig {
         let accounts_query_url = env::var("ACCOUNTS_QUERY_URL").ok()
             .unwrap_or_else(|| "http://localhost/api/v2/proxy/account-abstraction/accounts".to_string());
 
-        let refresh_interval_s = env::var("USAGE_STATS_BACKEND_REFETCH_INTERVAL_S").ok()
+        let refresh_interval_s = env::var("USAGE_STATS_REFETCH_INTERVAL_S").ok()
             .unwrap_or_else(|| "120000".to_string());
         let refetch_interval_s_u64: u64 = refresh_interval_s.parse().expect("Failed to parse MY_NUMBER as u64");
 
