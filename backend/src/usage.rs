@@ -78,8 +78,8 @@ struct UsageStatsKeys {
 pub struct UsageMonitoringConfig {
     user_ops_query_url: String,
     accounts_query_url: String,
-    usage_stats_keys: UsageStatsKeys,
     stats_refetch_interval_s: u64,
+    usage_stats_keys: UsageStatsKeys,
 }
 
 impl UsageMonitoringConfig {
@@ -103,8 +103,8 @@ impl UsageMonitoringConfig {
         UsageMonitoringConfig {
             user_ops_query_url,
             accounts_query_url,
-            usage_stats_keys,
             stats_refetch_interval_s: refetch_interval_s_u64,
+            usage_stats_keys,
         }
     }
 
@@ -187,6 +187,8 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
 
     loop {
         interval.tick().await;
+        let http_client = reqwest::Client::new();
+
         info!("🔹 Refresing usage stats...");
         let now = Utc::now();
 
@@ -199,7 +201,7 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
 
         info!("start_time {}", start_time);
         let mut locked_stats = shared_stats.lock().await;
-        let result = fetch_user_ops(&config.user_ops_query_url, start_time, now).await;
+        let result = fetch_user_ops(&http_client, &config.user_ops_query_url, start_time, now).await;
 
         // Aggregate gas used per sender (in the last 24 hours)
         let mut gas_usage: AccountsGasUsage = HashMap::new();
@@ -271,7 +273,7 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
             }
         }
 
-        let result = fetch_accounts(&config.accounts_query_url, start_time, now).await;
+        let result = fetch_accounts(&http_client, &config.accounts_query_url, start_time, now).await;
         match result {
             Ok(accounts) => {
                 info!("🔹 accounts count {}", accounts.len());
@@ -358,10 +360,8 @@ where
     }
 }
 
-async fn fetch_usage_common(endpoint: &str, start_time: DateTime<Utc>, end_time: DateTime<Utc>) 
+async fn fetch_usage_common(http_client: &reqwest::Client, query_url: &str, start_time: DateTime<Utc>, end_time: DateTime<Utc>) 
     -> Result<serde_json::Value, anyhow::Error> {
-
-    let http_client = reqwest::Client::new();
 
      // Format to YYYY-MM-DD HH:MM:SS
     let format_time = |time: DateTime<Utc>| -> String {
@@ -375,7 +375,7 @@ async fn fetch_usage_common(endpoint: &str, start_time: DateTime<Utc>, end_time:
 
     // ✅ Send request with query parameters (browser-like format)
     let response = http_client
-        .get(endpoint)
+        .get(query_url)
         .query(&query_params) // Use query parameters instead of JSON body
         .send()
         .await?
@@ -386,11 +386,12 @@ async fn fetch_usage_common(endpoint: &str, start_time: DateTime<Utc>, end_time:
     Ok(response)
 }
 
-async fn fetch_user_ops(query_url: &String, start_time: DateTime<Utc>, end_time: DateTime<Utc>) -> Result<Vec<UserOp>, anyhow::Error> {
+async fn fetch_user_ops(http_client: &reqwest::Client, query_url: &String,
+    start_time: DateTime<Utc>, end_time: DateTime<Utc>) -> Result<Vec<UserOp>, anyhow::Error> {
     info!("🔹 Fetching user operations");
 
     // Make API call with parameters
-    match fetch_usage_common(query_url, start_time, end_time).await {
+    match fetch_usage_common(http_client, query_url, start_time, end_time).await {
         Ok(data) => {
             // Extract "items" field and deserialize into Vec<UserOps>
             if let Some(items) = data.get("items") {
@@ -407,11 +408,12 @@ async fn fetch_user_ops(query_url: &String, start_time: DateTime<Utc>, end_time:
     }
 }
 
-async fn fetch_accounts(query_url: &String, start_time: DateTime<Utc>, end_time: DateTime<Utc>) -> Result<Vec<Account>, anyhow::Error> {
+async fn fetch_accounts(http_client: &reqwest::Client, query_url: &String,
+    start_time: DateTime<Utc>, end_time: DateTime<Utc>) -> Result<Vec<Account>, anyhow::Error> {
     info!("🔹 Fetching accounts");
 
     // Make API call with parameters
-    match fetch_usage_common(query_url, start_time, end_time).await {
+    match fetch_usage_common(http_client, query_url, start_time, end_time).await {
         Ok(data) => {
             // Extract "items" field and deserialize into Vec<Accounts>
             if let Some(items) = data.get("items") {
@@ -430,4 +432,169 @@ async fn fetch_accounts(query_url: &String, start_time: DateTime<Utc>, end_time:
 pub async fn get_usage_stats(state: SharedUsageStats) -> Json<UsageStats> {
     let data = state.lock().await.clone();
     Json(data)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::usage::{
+        TimeWindow,
+        UsageMonitoringConfig,
+        UsageStats,
+        fetch_user_ops,
+        fetch_accounts,
+        convert_to_u64,
+        get_address_hash,
+    };
+    use chrono::{Utc, TimeZone, Datelike};
+    use mockito::{Server, Matcher};
+    use serde_json::json;
+    use serde::Deserialize;
+
+    #[test]
+    fn test_time_window_to_duration() {
+        let now = Utc.with_ymd_and_hms(2025, 2, 17, 0, 0, 0).unwrap();
+
+        assert_eq!(TimeWindow::Last24Hours.to_duration(now), chrono::Duration::days(1));
+        assert_eq!(TimeWindow::Last30Days.to_duration(now), chrono::Duration::days(30));
+
+        // Year to date should return the number of days since Jan 1st
+        let expected_days = now.ordinal() as i64;
+        assert_eq!(TimeWindow::YearToDate.to_duration(now), chrono::Duration::days(expected_days));
+    }
+
+    #[test]
+    fn test_usage_stats_default() {
+        let config = UsageMonitoringConfig::new();
+        let stats = UsageStats::default(&config);
+
+        for (_, stat_name) in &config.usage_stats_keys.usage_stat_names {
+            assert!(stats.stats.contains_key(stat_name));
+            for (_, time_window) in &config.usage_stats_keys.time_windows {
+                assert_eq!(stats.stats[stat_name].get(time_window), Some(&0));
+            }
+        }
+
+        for (_, select_by) in &config.usage_stats_keys.select_accounts_by {
+            assert!(stats.selected_accounts.contains_key(select_by));
+            assert!(stats.selected_accounts[select_by].is_empty());
+        }
+    }
+
+    #[test]
+    fn test_convert_to_u64() {
+        #[derive(Deserialize)]
+        struct TestFee {
+            #[serde(deserialize_with = "convert_to_u64")]
+            fee: u64,
+        }
+    
+        let json_data = json!({ "fee": "12345" });
+        let obj: TestFee = serde_json::from_value(json_data).unwrap();
+        assert_eq!(obj.fee, 12345);
+    
+        let json_data = json!({ "fee": "invalid" });
+        let result: Result<TestFee, _> = serde_json::from_value(json_data);
+        assert!(result.is_err());
+    }
+
+    #[derive(Deserialize)]
+    struct TestAddress {
+        #[serde(deserialize_with = "get_address_hash")]
+        address: String,
+    }
+
+    #[test]
+    fn test_get_address_hash() {
+        let json_data = json!({ "address": { "hash": "0x123456" } });
+        let obj: TestAddress = serde_json::from_value(json_data).unwrap();
+        assert_eq!(obj.address, "0x123456");
+
+        let json_data = json!({ "address": {} }); // Missing "hash"
+        let result: Result<TestAddress, _> = serde_json::from_value(json_data);
+        assert!(result.is_err());
+
+        let json_data = json!({}); // Missing "address" field
+        let result: Result<TestAddress, _> = serde_json::from_value(json_data);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_fetch_user_ops() {
+        // ✅ Use the async version of mockito server
+        let mut server = Server::new_async().await;
+
+        let mock_endpoint = server.mock("GET", Matcher::Regex(r"^/user_ops(\?.*)?$".to_string()))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(json!({
+                "items": [
+                    {
+                        "address": { "hash": "0x123456789abcdef" },
+                        "fee": "100",
+                        "timestamp": "2024-03-10T12:00:00Z"
+                    }
+                ]
+            }).to_string())
+            .create();
+
+        let url = format!("{}/user_ops", server.url());
+
+        // ✅ Use a persistent reqwest client
+        let client = reqwest::Client::new();
+        let start_time = Utc::now() - chrono::Duration::days(1);
+        let end_time = Utc::now();
+
+        // ✅ Await the async call properly
+        let result = fetch_user_ops(&client, &url, start_time, end_time).await;
+        // Ensures the request actually hit the mock server
+        mock_endpoint.assert();
+
+        assert!(result.is_ok());
+
+        let ops = result.unwrap();
+        assert_eq!(ops.len(), 1);
+        assert_eq!(ops[0].sender, "0x123456789abcdef");
+        assert_eq!(ops[0].gas_used, 100);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_fetch_accounts() {
+        let mut server = Server::new_async().await;
+
+        // ✅ Ensure the mock server recognizes `/accounts`
+        let mock_endpoint = server.mock("GET", Matcher::Regex(r"^/accounts(\?.*)?$".to_string()))
+            .with_status(200)
+            .with_header("content-type", "application/json")
+            .with_body(json!({
+                "items": [
+                    {
+                        "address": { "hash": "0xabcdef123456" },
+                        "creation_timestamp": "2024-03-10T12:00:00Z",
+                        "gas_used": 50
+                    }
+                ]
+            }).to_string())
+            .create();
+
+        let url = format!("{}/accounts", server.url());
+
+        let client = reqwest::Client::new();
+        let start_time = Utc::now() - chrono::Duration::days(1);
+        let end_time = Utc::now();
+
+        let result = fetch_accounts(&client, &url, start_time, end_time).await;
+        // Ensures the request actually hit the mock server
+        mock_endpoint.assert();
+
+        // ✅ Print actual error if failed
+        assert!(result.is_ok(), "❌ fetch_accounts failed: {:?}", result.err());
+
+        let accounts = result.unwrap();
+        assert_eq!(accounts.len(), 1);
+        assert_eq!(accounts[0].address, "0xabcdef123456");
+        assert_eq!(accounts[0].gas_used, 50);
+
+        // ✅ Ensure request was received
+        mock_endpoint.assert();
+    }
 }
