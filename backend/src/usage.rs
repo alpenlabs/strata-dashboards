@@ -111,7 +111,7 @@ impl UsageMonitoringConfig {
     /// Read keys used in reporting usages from a json file.
     fn load_usage_keys() -> UsageStatsKeys {
         // Path relative to backend
-        let data = fs::read_to_string("../usage_keys.json").expect("Unable to read file");
+        let data = fs::read_to_string("usage_keys.json").expect("Unable to read file");
         serde_json::from_str(&data).expect("JSON parsing failed")
     }
 }
@@ -199,7 +199,6 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
             start_time = time_30d_earlier;
         }
 
-        info!("start_time {}", start_time);
         let mut locked_stats = shared_stats.lock().await;
         let result = fetch_user_ops(&http_client, &config.user_ops_query_url, start_time, now).await;
 
