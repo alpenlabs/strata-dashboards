@@ -1,6 +1,7 @@
 mod config;
 mod wallets;
 mod utils;
+mod bridge;
 
 use axum::{routing::get, Json, Router};
 use log::info;
@@ -15,6 +16,7 @@ use tower_http::cors::{Any, CorsLayer};
 use config::Config;
 
 use crate::wallets::{ SharedWallets, fetch_balances_task, get_wallets_with_balances, init_paymaster_wallets};
+use bridge::{BridgeMonitoringConfig, BridgeStatus, BridgeState, bridge_monitoring_task, get_bridge_status};
 use crate::utils::create_rpc_client;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -138,10 +140,21 @@ async fn main() {
     }
     );
 
+    let bridge_monitoring_config = BridgeMonitoringConfig::new();
+    // 🔹 Shared state for bridge status
+    let bridge_state = Arc::new(Mutex::new(BridgeStatus::default()));
+    tokio::spawn(
+    {
+        let bridge_state_clone = Arc::clone(&bridge_state);
+        async move {
+            bridge_monitoring_task(bridge_state_clone, &bridge_monitoring_config).await;
+        }
+    });
 
     let app = Router::new()
         .route("/api/status", get(move || get_network_status(Arc::clone(&shared_state))))
         .route("/api/balances", get(move || get_wallets_with_balances( paymaster_wallets)))
+        .route("/api/bridge_status", get(move || get_bridge_status(Arc::clone(&bridge_state))))
         .layer(cors);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
