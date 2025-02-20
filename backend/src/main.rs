@@ -16,7 +16,7 @@ use tower_http::cors::{Any, CorsLayer};
 use config::Config;
 
 use crate::wallets::{ SharedWallets, fetch_balances_task, get_wallets_with_balances, init_paymaster_wallets};
-use bridge::{BridgeMonitoringConfig, BridgeStatus, BridgeState, bridge_monitoring_task, get_bridge_status};
+use bridge::{BridgeMonitoringConfig, BridgeStatus, bridge_monitoring_task, get_bridge_status};
 use crate::utils::create_rpc_client;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

@@ -113,44 +113,56 @@ pub async fn bridge_monitoring_task(state: BridgeState, config: &BridgeMonitorin
 
     loop {
         interval.tick().await;
+        let mut locked_state = state.lock().await;
+
         let operators = get_bridge_operators(&config, &strata_rpc_client, &bridge_rpc_client).await.unwrap();
         info!("operator status {}", operators.len());
+        locked_state.operators = operators;
     }
 }
 
 pub async fn get_bridge_operators(config: &BridgeMonitoringConfig, strata_rpc: &HttpClient, bridge_rpc: &HttpClient) -> Result<Vec<OperatorStatus>, ClientError> {
     // Fetch active operator public keys
-    let operator_table: OperatorPublicKeys = match strata_rpc.request("getActiveOperatorChainPubkeySet", ((),)).await {
-        Ok(data) => data,
-        Err(e) => {
-            error!("Bridge status query failed with {}", e);
-            return Err(e);
-        }
-    };
+    // let operator_table: OperatorPublicKeys = match strata_rpc.request("getActiveOperatorChainPubkeySet", ((),)).await {
+    //     Ok(data) => data,
+    //     Err(e) => {
+    //         error!("Bridge status query failed with {}", e);
+    //         return Err(e);
+    //     }
+    // };
 
     let mut statuses = Vec::new();
 
-    for (index, public_key) in operator_table.0.iter() {
-        let operator_id = format!("Alpen Labs #{}", index);
+    // for (index, public_key) in operator_table.0.iter() {
+    //     let operator_id = format!("Alpen Labs #{}", index);
 
-        // Check if operator responds to an RPC request
-        // Explicitly define return type as `bool`
-        let ping_result: Result<bool, ClientError> =
-            timeout(Duration::from_secs(config.bridge_operator_ping_timeout_s), bridge_rpc.request("pingOperator", (public_key.clone(),)))
-                .await
-                .map_err(|_| ClientError::Custom("Timeout".into()))?;
+    //     // Check if operator responds to an RPC request
+    //     // Explicitly define return type as `bool`
+    //     let ping_result: Result<bool, ClientError> =
+    //         timeout(Duration::from_secs(config.bridge_operator_ping_timeout_s), bridge_rpc.request("pingOperator", (public_key.clone(),)))
+    //             .await
+    //             .map_err(|_| ClientError::Custom("Timeout".into()))?;
 
-        let status = if ping_result.is_ok() && ping_result.unwrap() {
-            "Online".to_string()
-        } else {
-            "Offline".to_string()
-        };
+    //     let status = if ping_result.is_ok() && ping_result.unwrap() {
+    //         "Online".to_string()
+    //     } else {
+    //         "Offline".to_string()
+    //     };
 
+    //     statuses.push(OperatorStatus {
+    //         operator_id,
+    //         operator_address: public_key.clone(),
+    //         status,
+    //     });
+    // }
+
+    // Mock status for now
+    for i in 1..=3 {
         statuses.push(OperatorStatus {
-            operator_id,
-            operator_address: public_key.clone(),
-            status,
-        });
+            operator_id: format!("Alpen Labs #{}", i),
+            operator_address: format!("0xdeadbeef{}", i),
+            status: "Online".to_string(),
+        })
     }
 
     Ok(statuses)
