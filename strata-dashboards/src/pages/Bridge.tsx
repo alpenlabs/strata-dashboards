@@ -1,6 +1,6 @@
-import { Suspense, useState, useEffect } from "react";
+import { Suspense } from "react";
 import { useLocation } from "react-router-dom";
-import { useBridgeStatus, OperatorStatus } from "../hooks/useBridgeStatus.ts";
+import { useBridgeStatus, OperatorStatus } from "../hooks/useBridgeStatus";
 
 export default function Bridge() {
     const { pathname } = useLocation(); // Get current URL path
@@ -19,7 +19,7 @@ export default function Bridge() {
                         ) : (
                             <div className="bridge-cards">
                                 <span className="operators-title">Bridge operator status</span>
-                                {data?.operators?.length > 0 ? (
+                                { data && data.operators ? (
                                     <div className="operators-section">
                                         <table className="operators-table">
                                             <tbody>
