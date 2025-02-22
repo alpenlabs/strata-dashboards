@@ -248,6 +248,83 @@ button:focus-visible {
     font-weight: bold;
 }
 
+/* Usage stats */
+.usage-cards {
+    display: flex;
+    flex-direction: row;
+    text-align: center;
+    gap: 8px;
+}
+
+.usage-section {
+    justify-content: space-between;
+    margin: 0 20px;
+    padding: 10px 10px;
+    width: 33%;
+}
+
+.tab-container {
+    margin-bottom: 8px;
+}
+
+.usage-title {
+    /* font-weight: bold; */
+    margin: 0 1rem;
+    color: var(--strata-terracotta-med);
+}
+
+.usage-tab {
+    /* border-radius: 0; */
+    padding: 10px 10px;
+    color: var(--strata-terracotta-med);
+    background-color: transparent;
+}
+
+.usage-tab-active {
+    text-decoration:underline;
+}
+
+.stat-value {
+    padding: 2rem 10px;
+    margin: 0.5rem auto;
+    border: 1px solid black;
+    border-radius: 10px;
+    font-weight: bold;
+}
+
+.accounts-section {
+    justify-content: space-between;
+    margin: 0 20px;
+    padding: 50px 10px;
+    width: 50%;
+}
+
+.account-list {
+    list-style: none;
+    padding: 0;
+}
+  
+.account-item {
+    display: flex;
+    flex-direction: column;
+    padding: 8px 0;
+    border-bottom: 1px solid #ddd;
+}
+  
+.account-address {
+    font-weight: bold;
+}
+  
+.account-detail {
+    font-size: 14px;
+    color: gray;
+}
+    
+.no-accounts {
+    font-style: italic;
+    color: gray;
+}
+
 /* Sidebar menu */
 .menu {
     margin-top: 50px;
