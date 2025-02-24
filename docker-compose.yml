@@ -1,0 +1,29 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend.Dockerfile
+    container_name: strata_dashboards_backend
+    environment:
+      RPC_URL: https://strataclient1ff4bc1df.devnet-annapurna.stratabtc.org
+      BUNDLER_URL: https://bundler.devnet-annapurna.stratabtc.org/health
+      # TODO: Update the following two urls after strata blockscout service includes
+      #       updated user-ops-indexer supporting timestamp-based filtering
+      USER_OPS_QUERY_URL: http://localhost/api/v2/proxy/account-abstraction/operations
+      ACCOUNTS_QUERY_URL: http://localhost/api/v2/proxy/account-abstraction/accounts
+      USAGE_STATS_REFETCH_INTERVAL_S: 120
+    ports:
+      - "3000:3000"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend.Dockerfile
+    container_name: strata_dashboards_frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE_URL: http://localhost:3000
+      VITE_USAGE_STATS_REFETCH_INTERVAL_S: 60

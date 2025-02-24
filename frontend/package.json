@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "start": "npm run build && vite",
+    "build": "cp ../backend/usage_keys.json ./public/usage_keys.json && tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },

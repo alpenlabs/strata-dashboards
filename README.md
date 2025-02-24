@@ -1,15 +1,16 @@
 # strata-dashboards
 
 ## Run backend
+
 ```bash
 cd backend
 cargo run
 ```
 
-
 ## Run frontend
+
 ```bash
-cd strata-dashboards
+cd frontend
 npm install
-npm run dev
+npm run start
 ```

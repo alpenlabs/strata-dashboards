@@ -2,6 +2,7 @@ mod config;
 mod wallets;
 mod utils;
 mod bridge;
+mod usage;
 
 use axum::{routing::get, Json, Router};
 use log::info;
@@ -18,6 +19,12 @@ use config::Config;
 use crate::wallets::{ SharedWallets, fetch_balances_task, get_wallets_with_balances, init_paymaster_wallets};
 use bridge::{BridgeMonitoringConfig, BridgeStatus, bridge_monitoring_task, get_bridge_status};
 use crate::utils::create_rpc_client;
+use crate::usage::{
+    UsageMonitoringConfig,
+    UsageStats,
+    usage_monitoring_task,
+    get_usage_stats
+};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "lowercase")]
@@ -35,7 +42,6 @@ struct NetworkStatus {
 
 // Shared State
 type SharedState = Arc<Mutex<NetworkStatus>>;
-
 
 /// Calls `strata_syncStatus` using `jsonrpsee`
 async fn call_rpc_status(client: &HttpClient) -> Status {
@@ -101,6 +107,7 @@ async fn get_network_status(state: SharedState) -> Json<NetworkStatus> {
     let data = state.lock().await.clone();
     Json(data)
 }
+
 #[tokio::main]
 async fn main() {
     // ✅ Initialize logger with info level
@@ -140,6 +147,20 @@ async fn main() {
     }
     );
 
+    // Usage monitoring
+    let usage_monitoring_config = UsageMonitoringConfig::new();
+    let usage_stats = UsageStats::default(&usage_monitoring_config);
+    // 🔹 Shared state for usage stats
+    let shared_usage_stats = Arc::new(Mutex::new(usage_stats));
+    tokio::spawn(
+    {
+        let usage_stats_clone = Arc::clone(&shared_usage_stats);
+        async move {
+            usage_monitoring_task(usage_stats_clone, &usage_monitoring_config).await;
+        }
+    });
+
+    // bridge monitoring
     let bridge_monitoring_config = BridgeMonitoringConfig::new();
     // 🔹 Shared state for bridge status
     let bridge_state = Arc::new(Mutex::new(BridgeStatus::default()));
@@ -151,10 +172,12 @@ async fn main() {
         }
     });
 
+
     let app = Router::new()
         .route("/api/status", get(move || get_network_status(Arc::clone(&shared_state))))
         .route("/api/balances", get(move || get_wallets_with_balances( paymaster_wallets)))
         .route("/api/bridge_status", get(move || get_bridge_status(Arc::clone(&bridge_state))))
+        .route("/api/usage_stats", get(move || get_usage_stats(Arc::clone(&shared_usage_stats))))
         .layer(cors);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
