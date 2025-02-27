@@ -358,13 +358,20 @@ button:focus-visible {
     color: var(--strata-terracotta-med);
 }
 
-.operators-title {
-    margin-bottom: 10px; /* Spacing between title and table */
-}
 .operators-section {
-    margin-top: 10px;
-    justify-content: space-between;
-    width: 50%;
+    margin-left: 20px; /* Ensures left spacing for both title & table */
+    text-align: left;
+    max-width: 600px; /* Prevents the table from spreading too wide */
+}
+
+.operators-title {
+    margin-bottom: 10px; /* Adds space between title and table */
+    color: var(--strata-terracotta-med);
+}
+
+.table-wrapper {
+    display: flex;
+    justify-content: flex-start; /* Aligns the table to the left */
 }
 
 .operators-table {

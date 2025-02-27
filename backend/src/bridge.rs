@@ -23,7 +23,7 @@ impl BridgeMonitoringConfig {
 
         let strata_rpc_url = env::var("STRATA_RPC_URL").ok()
             .unwrap_or_else(|| {
-                "https://fnclientbcc5fe8c4454c314eb0a00cd3882.devnet-annapurna.stratabtc.org/".to_string()
+                "https://strataseq.temp6-testnet1-staging.stratabtc.org/".to_string()
             });
 
         let bridge_rpc_url = env::var("STRATA_BRIDGE_RPC_URL").ok()
@@ -135,24 +135,25 @@ pub async fn get_bridge_operators(config: &BridgeMonitoringConfig, strata_rpc: &
 
     // for (index, public_key) in operator_table.0.iter() {
     //     let operator_id = format!("Alpen Labs #{}", index);
+    //     info!("operator {}", operator_id);
 
-    //     // Check if operator responds to an RPC request
-    //     // Explicitly define return type as `bool`
-    //     let ping_result: Result<bool, ClientError> =
-    //         timeout(Duration::from_secs(config.bridge_operator_ping_timeout_s), bridge_rpc.request("pingOperator", (public_key.clone(),)))
-    //             .await
-    //             .map_err(|_| ClientError::Custom("Timeout".into()))?;
+        // Check if operator responds to an RPC request
+        // Explicitly define return type as `bool`
+        // let ping_result: Result<bool, ClientError> =
+        //     timeout(Duration::from_secs(config.bridge_operator_ping_timeout_s), bridge_rpc.request("pingOperator", (public_key.clone(),)))
+        //         .await
+        //         .map_err(|_| ClientError::Custom("Timeout".into()))?;
 
-    //     let status = if ping_result.is_ok() && ping_result.unwrap() {
-    //         "Online".to_string()
-    //     } else {
-    //         "Offline".to_string()
-    //     };
+        // let status = if ping_result.is_ok() && ping_result.unwrap() {
+        //     "Online".to_string()
+        // } else {
+        //     "Offline".to_string()
+        // };
 
     //     statuses.push(OperatorStatus {
     //         operator_id,
     //         operator_address: public_key.clone(),
-    //         status,
+    //         status: "Online".to_string(),
     //     });
     // }
 

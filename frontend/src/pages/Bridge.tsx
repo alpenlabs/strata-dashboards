@@ -17,10 +17,10 @@ export default function Bridge() {
                         {isLoading ? (
                             <p className="loading-text">Loading...</p>
                         ) : (
-                            <div className="bridge-cards">
+                            <div className="operators-section">
                                 <span className="operators-title">Bridge operator status</span>
                                 { data && data.operators ? (
-                                    <div className="operators-section">
+                                    <div className="table-wrapper">
                                         <table className="operators-table">
                                             <tbody>
                                                 {data.operators.map((operator: OperatorStatus, index: number) => (
