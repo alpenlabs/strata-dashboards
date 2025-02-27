@@ -178,7 +178,7 @@ pub async fn bridge_monitoring_task(state: BridgeState, config: &BridgeMonitorin
         for (index, _) in operators.0.iter() {
             let operator_id = format!("Alpen Labs #{}", index);
             info!("operator {}", operator_id);
-            let mut withdrawal_infos: Vec<WithdrawalInfo> = match get_withdrawal_info(&strata_rpc_client, *index).await {
+            let mut withdrawal_infos: Vec<WithdrawalInfo> = match get_withdrawals(&strata_rpc_client, &bridge_rpc_client, *index).await {
                 Ok(data) => data,
                 Err(e) => {
                     error!("Bridge get withdrawal failed with {}", e);
@@ -187,6 +187,16 @@ pub async fn bridge_monitoring_task(state: BridgeState, config: &BridgeMonitorin
             };
             locked_state.withdrawals.append(& mut withdrawal_infos);
         }
+
+        // Reimbursements        
+        let reimbursements: Vec<ReimbursementInfo> = match get_reimbursements(&bridge_rpc_client).await {
+            Ok(data) => data,
+            Err(e) => {
+                error!("Bridge get withdrawal failed with {}", e);
+                Vec::new()
+            }
+        };
+        locked_state.reimbursements = reimbursements;
     }
 }
 
@@ -203,7 +213,7 @@ fn mock_operator_table() -> OperatorPublicKeys {
     operator_table
 }
 
-pub async fn get_bridge_operators(rpc_client: &HttpClient) -> Result<OperatorPublicKeys, ClientError> {
+async fn get_bridge_operators(rpc_client: &HttpClient) -> Result<OperatorPublicKeys, ClientError> {
     let operator_table = mock_operator_table();
 
     // Fetch active operator public keys
@@ -218,7 +228,7 @@ pub async fn get_bridge_operators(rpc_client: &HttpClient) -> Result<OperatorPub
     Ok(operator_table)
 }
 
-pub async fn get_operator_status(config: &BridgeMonitoringConfig, rpc_client: &HttpClient, operator_pk: &String) -> Result<String, ClientError> {
+async fn get_operator_status(config: &BridgeMonitoringConfig, rpc_client: &HttpClient, operator_pk: &String) -> Result<String, ClientError> {
     // Check if operator responds to an RPC request
     // Explicitly define return type as `bool`
     // let ping_result: Result<bool, ClientError> =
@@ -237,7 +247,7 @@ pub async fn get_operator_status(config: &BridgeMonitoringConfig, rpc_client: &H
     Ok("Online".to_string())
 }
 
-pub async fn get_current_deposits(rpc_client: &HttpClient) -> Result<Vec<u32>, ClientError> {
+async fn get_current_deposits(rpc_client: &HttpClient) -> Result<Vec<u32>, ClientError> {
     let deposit_ids = vec![1, 2, 3];
     // let deposit_ids: Vec<u32> = match rpc_client.request("getCurrentDeposits", ((),)).await {
     //     Ok(data) => data,
@@ -263,7 +273,7 @@ fn mock_deposit_info(deposit_id: u32) -> DepositInfo {
     deposit_info
 }
 
-pub async fn get_deposit_info(rpc_client: &HttpClient, deposit_id: u32) -> Result<DepositInfo, ClientError> {
+async fn get_deposit_info(rpc_client: &HttpClient, deposit_id: u32) -> Result<DepositInfo, ClientError> {
 
     let deposit_info = mock_deposit_info(deposit_id);
 
@@ -297,10 +307,10 @@ fn mock_withdrawal_info(operator_idx: u32) -> Vec<WithdrawalInfo> {
     withdrawals
 }
 
-pub async fn get_withdrawal_info(rpc_client: &HttpClient, operator_idx: u32) -> Result<Vec<WithdrawalInfo>, ClientError> {
+async fn get_withdrawals(strata_client: &HttpClient, bridge_client: &HttpClient, operator_idx: u32) -> Result<Vec<WithdrawalInfo>, ClientError> {
     let withdrawal_infos = mock_withdrawal_info(operator_idx);
 
-    // let bridge_duties: RpcBridgeDuties = match rpc_client.request("getBridgeDuties", (operator_idx, 0)).await {
+    // let bridge_duties: RpcBridgeDuties = match strata_client.request("getBridgeDuties", (operator_idx, 0)).await {
     //     Ok(data) => data,
     //     Err(e) => {
     //         error!("Get bridge duties failed with {}", e);
@@ -315,7 +325,7 @@ pub async fn get_withdrawal_info(rpc_client: &HttpClient, operator_idx: u32) -> 
     //         println!("Calling getWithdrawalInfo for Outpoint: {}", deposit_outpoint);
 
     //         // Call `getWithdrawalInfo(deposit_outpoint)` here
-    //         let wd_info: WithdrawalInfo = match rpc_client.request("getWithdrawalInfo", (deposit_outpoint.clone(), )).await {
+    //         let wd_info: WithdrawalInfo = match bridge_client.request("getWithdrawalInfo", (deposit_outpoint.clone(), )).await {
     //             Ok(data) => data,
     //             Err(e) => {
     //                 error!("Get withdrawal info failed with {}", e);
@@ -330,52 +340,51 @@ pub async fn get_withdrawal_info(rpc_client: &HttpClient, operator_idx: u32) -> 
     Ok(withdrawal_infos)
 }
 
-// pub async fn get_claim_info(claim_txid: &str) -> Result<ReimbursementInfo, reqwest::Error> {
-//     let client = Client::new();
-//     let rpc_url = env::var("BRIDGE_ORCHESTRATOR_URL").unwrap();
-//     let response = client.get(format!("{}/getClaimInfo/{}", rpc_url, claim_txid)).send().await?;
-//     let claim_info: ReimbursementInfo = response.json().await?;
-//     Ok(claim_info)
-// }
+fn mock_reimbursement_infos() -> Vec<ReimbursementInfo> {
 
-// pub async fn bridge_deposits() -> Json<Vec<rpc_client::DepositInfo>> {
-//     let deposits = rpc_client::get_current_deposits().await.unwrap_or_default();
-//     let mut deposit_infos = Vec::new();
+    let mut reimbursements = Vec::new();
+    let base_claim_txid = "0xfedcbaabcdef";
 
-//     for deposit_txid in deposits {
-//         if let Ok(info) = rpc_client::get_deposit_info(&deposit_txid).await {
-//             deposit_infos.push(info);
-//         }
-//     }
+    for i in 1..=4 {
+        reimbursements.push(
+            ReimbursementInfo {
+                claim_txid: format!("0xfedcbaabcdef123{}", i).to_string(),
+                payout_txid: Some(format!("0x123fedcbaabcdef{}", i).to_string()),
+                challenge_step: "N/A".to_string(),
+                status: "Complete".to_string(),
+        });
+    }
 
-//     Json(deposit_infos)
-// }
+    reimbursements
+}
 
-// pub async fn bridge_withdrawals() -> Json<Vec<rpc_client::WithdrawalInfo>> {
-//     let withdrawals = vec!["outpoint_1", "outpoint_2"];
-//     let mut withdrawal_infos = Vec::new();
+async fn get_reimbursements(bridge_client: &HttpClient) -> Result<Vec<ReimbursementInfo>, ClientError> {
+    let reimbursement_infos = mock_reimbursement_infos();
 
-//     for outpoint in withdrawals {
-//         if let Ok(Some(info)) = rpc_client::get_withdrawal_info(&outpoint).await {
-//             withdrawal_infos.push(info);
-//         }
-//     }
+    // let claim_txids: Vec<String> = match bridge_client.request("getClaims", ((),)).await {
+    //     Ok(data) => data,
+    //     Err(e) => {
+    //         error!("Get bridge claims failed with {}", e);
+    //         return Err(e);
+    //     }
+    // };
 
-//     Json(withdrawal_infos)
-// }
+    // let mut reimbursement_infos = Vec::new();
+    // for txid in claim_txids.iter() {
+        // Call `getWithdrawalInfo(deposit_outpoint)` here
+        // let reimb_info: ReimbursementInfo = match rpc_client.request("getClaimInfo", (txid.clone(), )).await {
+        //     Ok(data) => data,
+        //     Err(e) => {
+        //         error!("Get claim info failed with {}", e);
+        //         return Err(e);
+        //     }
+        // };
 
-// pub async fn bridge_reimbursements() -> Json<Vec<rpc_client::BridgeReimbursement>> {
-//     let claims = vec!["claim_txid_1", "claim_txid_2"];
-//     let mut claim_infos = Vec::new();
+        // reimbursement_infos.push(wd_info);
+    // }
 
-//     for claim in claims {
-//         if let Ok(info) = rpc_client::get_claim_info(&claim).await {
-//             claim_infos.push(info);
-//         }
-//     }
-
-//     Json(claim_infos)
-// }
+    Ok(reimbursement_infos)
+}
 
 pub async fn get_bridge_status(state: BridgeState) -> Json<BridgeStatus> {
     let data = state.lock().await.clone();
