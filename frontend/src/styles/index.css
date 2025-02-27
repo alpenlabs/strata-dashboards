@@ -222,7 +222,6 @@ button:focus-visible {
     border-bottom: 1px solid grey;
 }
 
-
 .balance-card {
     display: flex;
     flex-direction: column;
@@ -242,7 +241,6 @@ button:focus-visible {
     margin-bottom: 5px;
     /* Add spacing between title and balance */
 }
-
 
 .unit {
     font-weight: bold;
@@ -310,16 +308,16 @@ button:focus-visible {
     padding: 8px 0;
     border-bottom: 1px solid #ddd;
 }
-  
+
 .account-address {
     font-weight: bold;
 }
-  
+
 .account-detail {
     font-size: 14px;
     color: gray;
 }
-    
+
 .no-accounts {
     font-style: italic;
     color: gray;
@@ -344,29 +342,22 @@ button:focus-visible {
     color: var(--strata-sand-med);
 }
 
-/* Bridge Status */
-.bridge-cards {
-    display: flex;
-    flex-direction: row;
-    text-align: center;
-    gap: 8px;
+.bridge-container {
+    margin-left: 30px; /* Adds left margin */
+    margin-top: 20px;  /* Adds top margin */
 }
 
+/* Bridge Status */
 .bridge-title {
     /* font-weight: bold; */
-    margin: 0 1rem;
+    margin-bottom: 50px;
     color: var(--strata-terracotta-med);
 }
 
-.operators-section {
-    margin-left: 20px; /* Ensures left spacing for both title & table */
+.bridge-section {
+    margin-bottom: 50px;
     text-align: left;
-    max-width: 600px; /* Prevents the table from spreading too wide */
-}
-
-.operators-title {
-    margin-bottom: 10px; /* Adds space between title and table */
-    color: var(--strata-terracotta-med);
+    width: 600px; /* Prevents the table from spreading too wide */
 }
 
 .table-wrapper {
@@ -380,17 +371,45 @@ button:focus-visible {
     margin-top: 10px;
 }
 
-.operators-row td {
-    padding: 12px 8px;
-    text-align: left;
+.operators-row:not(:last-child) {
+    border-bottom: 1px solid black; /* Horizontal separator between rows */
 }
 
-.operators-row:not(:last-child) td {
-    border-bottom: 1px solid black; /* Horizontal separator between rows */
+.operators-row td {
+    text-align: center;
+    margin-left: 10px;
+    padding: 12px 8px;
 }
 
 .operators-row td:first-child {
     font-weight: bold; /* Only the first column (ID) is bold */
+}
+
+.transactions-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+.transactions-header th {
+    font-weight: bold;
+    padding: 10px 8px;
+    text-align: center;
+    border-bottom: 1px solid black; /* Separator for headers */
+}
+
+.transactions-row {
+    border-bottom: 1px solid black; /* Horizontal separator between rows */
+}
+
+.transactions-row td {
+    text-align: center;
+    padding: 12px 8px;
+    margin-left: 10px;
+}
+
+.table-cell {
+    text-align: center;
 }
 
 .no-items {
