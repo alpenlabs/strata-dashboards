@@ -11,7 +11,6 @@ use crate::utils::create_rpc_client;
 use axum::Json;
 
 pub type SharedWallets = Arc<Mutex<PaymasterWallets>>;
-
 #[derive(Clone, Debug, Serialize)]
 pub struct Wallet {
     /// Wallet address

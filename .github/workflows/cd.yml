@@ -128,7 +128,10 @@ jobs:
         run: |
           sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
           sudo chmod +x /usr/local/bin/yq
-
+      - name: Debug yq Version
+        run: |
+          yq --version
+          which yq
       - name: Update Docker image tag in Helm values # Sanitized SHORT_TAG and safe yq usage
         env:
           CLUSTER_NAME: ${{ vars.CLUSTER_NAME }}
@@ -142,14 +145,14 @@ jobs:
           # Added boolean validation function
           validate_boolean() { [[ "$1" == "true" || "$1" == "false" ]]; }
 
-          if validate_boolean "$FRONTEND_CHANGED" && [[ "$FRONTEND_CHANGED" == "true" ]]; then
+          if [[ "$FRONTEND_CHANGED" == "true" ]]; then
             echo "Updating frontend tag in $VALUES_FILE"
-            yq eval -i --arg tag "$SHORT_TAG" ".strataDashboard.frontend.image.tag = $tag" "$VALUES_FILE" 
+            yq eval -i ".strataDashboard.frontend.image.tag = \"$SHORT_TAG\"" "$VALUES_FILE" 
           fi
 
-          if validate_boolean "$BACKEND_CHANGED" && [[ "$BACKEND_CHANGED" == "true" ]]; then
+          if [[ "$BACKEND_CHANGED" == "true" ]]; then
             echo "Updating backend tag in $VALUES_FILE"
-            yq eval -i --arg tag "$SHORT_TAG" ".strataDashboard.backend.image.tag = $tag" "$VALUES_FILE" 
+            yq eval -i ".strataDashboard.backend.image.tag = \"$SHORT_TAG\"" "$VALUES_FILE" 
           fi
 
       - name: Commit and push changes
