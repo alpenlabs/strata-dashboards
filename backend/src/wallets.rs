@@ -11,7 +11,6 @@ use crate::utils::create_rpc_client;
 use axum::Json;
 
 pub type SharedWallets = Arc<Mutex<PaymasterWallets>>;
-
 #[derive(Clone, Debug, Serialize)]
 pub struct Wallet {
     /// Wallet address
@@ -19,6 +18,7 @@ pub struct Wallet {
     /// Wallet balance in Wei
     balance: String,
 }
+
 impl Wallet {
     pub fn new(address: String, balance: String) -> Self {
         Self { address, balance }

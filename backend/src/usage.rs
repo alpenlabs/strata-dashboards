@@ -7,6 +7,7 @@ use std::{
     collections::HashMap,
     collections::HashSet
 };
+
 use chrono::{
     Utc,
     DateTime,
@@ -14,6 +15,7 @@ use chrono::{
     Duration,
     Datelike
 };
+
 use axum::Json;
 use serde_json::Value;
 use serde::de::{self, Deserializer};
@@ -243,19 +245,16 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
                                             .or_insert(0) += 1; // Increment counter
                                     }
                                 }
-
                                 // Track unique senders
                                 unique_accounts.get_mut(period).unwrap().insert(entry.sender.clone());
                             }
                         }
-
                         // Update gas used by sender
                         if now - Duration::days(1) <= op_time {
                             *gas_usage.entry(entry.sender.clone()).or_insert(0) += entry.gas_used;
                         }
                     }
                 }
-
                 // Store the count of unique active accounts
                 for (period, accounts_set) in unique_accounts {
                     locked_stats
@@ -296,7 +295,6 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
 
                 // Take the top 5 most recent accounts
                 let recent_accounts = sorted_accounts.into_iter().take(5).collect::<Vec<_>>();
-
                 // Store in shared stats
                 locked_stats.selected_accounts.insert(config.usage_stats_keys.select_accounts_by[&SelectAccountsBy::Recent].clone(), recent_accounts);
             } 

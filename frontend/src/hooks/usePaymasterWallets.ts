@@ -10,13 +10,13 @@ export type PaymasterWallets = {
     validating: Wallet;
 };
 
-const API_BASE_URL = import.meta.env.API_BASE_URL || "http://localhost:3000";
+const VITE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 
 /**
  * Fetches Paymaster Wallets from API
  */
 const fetchPaymasterWallets = async (): Promise<PaymasterWallets> => {
-    const response = await fetch(`${API_BASE_URL}/api/balances`);
+    const response = await fetch(`${VITE_API_BASE_URL}/api/balances`);
     if (!response.ok) {
         throw new Error("Failed to fetch paymaster wallets");
     }
