@@ -18,6 +18,7 @@ pub struct Wallet {
     /// Wallet balance in Wei
     balance: String,
 }
+
 impl Wallet {
     pub fn new(address: String, balance: String) -> Self {
         Self { address, balance }
