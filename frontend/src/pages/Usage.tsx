@@ -52,17 +52,30 @@ export default function Usage() {
         }).catch(console.error);
     }, []);
 
-    const [statPeriods, setStatPeriods] = useState<Record<string, string>>({});
+    const [statPeriods, setStatPeriods] = useState<Record<string, string>>(() => {
+        const defaultStatPeriods: Record<string, string> = {};
+      
+        // Ensure we have both statsNames and timeWindows before initializing
+        if (statsNames.length > 0 && timeWindows.length > 0) {
+            statsNames.forEach((stat) => {
+                defaultStatPeriods[stat] = timeWindows[0]; // Default to first available time window
+            });
+        }
+
+        return defaultStatPeriods;
+    });
+
+    // Update `statPeriods` when `statsNames` or `timeWindows` change
     useEffect(() => {
+        if (statsNames.length === 0 || timeWindows.length === 0) return;
+
         const defaultStatPeriods: Record<string, string> = {};
         statsNames.forEach((stat) => {
-            // Default to first available time period
-            defaultStatPeriods[stat] = timeWindows[0];
+          defaultStatPeriods[stat] = timeWindows[0]; // Default to first available time period
         });
 
         setStatPeriods(defaultStatPeriods);
-    }, [data]); // Ensures this only runs when `data` updates
-
+    }, [statsNames, timeWindows]); // ✅ Runs only when these values change      
 
     return (
         <div className="usage-content">
