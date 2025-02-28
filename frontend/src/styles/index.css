@@ -21,7 +21,6 @@
     --strata-marengo-light: #778B91;
     --strata-marengo-med: #526971;
     --strata-marengo-sharp: #273F46;
-
 }
 
 
@@ -120,10 +119,14 @@ button:focus-visible {
 .dashboard {
     display: flex;
     width: 100%;
+    min-height: 100vh; /* Ensures full height */
+    align-items: stretch;
 }
 
 .sidebar {
     width: 15%;
+    min-height: 100vh; /* Ensures full viewport height */
+    height: auto;
     /* Fixed sidebar width */
     background-color: var(--strata-terracotta-med);
     color: var(--strata-terracotta-light);
