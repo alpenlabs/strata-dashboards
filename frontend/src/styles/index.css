@@ -268,13 +268,12 @@ button:focus-visible {
 }
 
 .usage-title {
-    /* font-weight: bold; */
     margin: 0 1rem;
     color: var(--strata-terracotta-med);
 }
 
 .usage-tab {
-    /* border-radius: 0; */
+    cursor: pointer;
     padding: 10px 10px;
     color: var(--strata-terracotta-med);
     background-color: transparent;

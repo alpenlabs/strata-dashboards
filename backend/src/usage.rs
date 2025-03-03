@@ -267,7 +267,7 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
             }
             Err(e) =>
             {
-                error!("Fetch user ops failed {}", e);
+                error!("Fetch user ops failed with: {}", e);
             }
         }
 
@@ -300,7 +300,7 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
             } 
             Err(e) =>
             {
-                error!("Fetch accounts failed {}", e);
+                error!("Fetch accounts failed with: {}", e);
             }
         }
 
@@ -400,8 +400,7 @@ async fn fetch_user_ops(http_client: &reqwest::Client, query_url: &String,
                 Err(anyhow!("Unexpected response"))
             }
         }
-        // error!("Failed to fetch User Ops: {:?}", e);
-        Err(e) => Err(anyhow!("Fetch user ops failed with {}", e))
+        Err(e) => Err(anyhow!(e))
     }
 }
 
@@ -422,7 +421,7 @@ async fn fetch_accounts(http_client: &reqwest::Client, query_url: &String,
                 Err(anyhow!("Unexpected response"))
             }
         },
-        Err(e) => Err(anyhow!("Fetch accounts failed with {}", e))
+        Err(e) => Err(anyhow!(e))
     }
 }
 
