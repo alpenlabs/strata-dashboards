@@ -170,7 +170,7 @@ pub async fn bridge_monitoring_task(state: BridgeState, config: &BridgeMonitorin
         info!("current deposits {}", current_deposits.len());
 
         for deposit_id in current_deposits {
-            let deposit_info = get_deposit_info(&bridge_rpc_client, deposit_id).await.unwrap();
+            let deposit_info = get_deposit_info(&strata_rpc_client, &bridge_rpc_client, deposit_id).await.unwrap();
             locked_state.deposits.push(deposit_info);
         }
 
@@ -178,7 +178,7 @@ pub async fn bridge_monitoring_task(state: BridgeState, config: &BridgeMonitorin
         for (index, _) in operators.0.iter() {
             let operator_id = format!("Alpen Labs #{}", index);
             info!("operator {}", operator_id);
-            let mut withdrawal_infos: Vec<WithdrawalInfo> = match get_withdrawals(&strata_rpc_client, &bridge_rpc_client, *index).await {
+            let mut withdrawal_infos: Vec<WithdrawalInfo> = match get_withdrawals(&bridge_rpc_client, *index).await {
                 Ok(data) => data,
                 Err(e) => {
                     error!("Bridge get withdrawal failed with {}", e);
@@ -343,7 +343,6 @@ async fn get_withdrawals(bridge_client: &HttpClient, operator_idx: u32) -> Resul
 fn mock_reimbursement_infos() -> Vec<ReimbursementInfo> {
 
     let mut reimbursements = Vec::new();
-    let base_claim_txid = "0xfedcbaabcdef";
 
     for i in 1..=4 {
         reimbursements.push(
