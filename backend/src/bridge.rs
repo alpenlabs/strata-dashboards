@@ -213,11 +213,11 @@ fn mock_operator_table() -> OperatorPublicKeys {
     operator_table
 }
 
-async fn get_bridge_operators(rpc_client: &HttpClient) -> Result<OperatorPublicKeys, ClientError> {
+async fn get_bridge_operators(bridge_client: &HttpClient) -> Result<OperatorPublicKeys, ClientError> {
     let operator_table = mock_operator_table();
 
     // Fetch active operator public keys
-    // let operator_table: OperatorPublicKeys = match strata_rpc.request("getActiveOperatorChainPubkeySet", ((),)).await {
+    // let operator_table: OperatorPublicKeys = match bridge_client.request("getBridgeOperators", ((),)).await {
     //     Ok(data) => data,
     //     Err(e) => {
     //         error!("Bridge status query failed with {}", e);
@@ -228,11 +228,11 @@ async fn get_bridge_operators(rpc_client: &HttpClient) -> Result<OperatorPublicK
     Ok(operator_table)
 }
 
-async fn get_operator_status(config: &BridgeMonitoringConfig, rpc_client: &HttpClient, operator_pk: &String) -> Result<String, ClientError> {
+async fn get_operator_status(config: &BridgeMonitoringConfig, bridge_client: &HttpClient, operator_pk: &String) -> Result<String, ClientError> {
     // Check if operator responds to an RPC request
     // Explicitly define return type as `bool`
     // let ping_result: Result<bool, ClientError> =
-    //     timeout(Duration::from_secs(config.bridge_operator_ping_timeout_s), rpc_client.request("pingOperator", (operator_pk.clone(),)))
+    //     timeout(Duration::from_secs(config.bridge_operator_ping_timeout_s), bridge_client.request("bridgeOperatorHealthCheck", (operator_pk.clone(),)))
     //         .await
     //         .map_err(|_| ClientError::Custom("Timeout".into()))?;
 
@@ -247,9 +247,9 @@ async fn get_operator_status(config: &BridgeMonitoringConfig, rpc_client: &HttpC
     Ok("Online".to_string())
 }
 
-async fn get_current_deposits(rpc_client: &HttpClient) -> Result<Vec<u32>, ClientError> {
+async fn get_current_deposits(strata_client: &HttpClient) -> Result<Vec<u32>, ClientError> {
     let deposit_ids = vec![1, 2, 3];
-    // let deposit_ids: Vec<u32> = match rpc_client.request("getCurrentDeposits", ((),)).await {
+    // let deposit_ids: Vec<u32> = match strata_client.request("getCurrentDeposits", ((),)).await {
     //     Ok(data) => data,
     //     Err(e) => {
     //         error!("Current deposits query failed with {}", e);
@@ -273,19 +273,19 @@ fn mock_deposit_info(deposit_id: u32) -> DepositInfo {
     deposit_info
 }
 
-async fn get_deposit_info(rpc_client: &HttpClient, deposit_id: u32) -> Result<DepositInfo, ClientError> {
+async fn get_deposit_info(strata_client: &HttpClient, bridge_client: &HttpClient, deposit_id: u32) -> Result<DepositInfo, ClientError> {
 
     let deposit_info = mock_deposit_info(deposit_id);
 
-    // let deposit_txid: String = match rpc_client.request("getCurrentDepositById", (deposit_id,)).await {
+    // let deposit_txid: String = match strata_client.request("getCurrentDepositById", (deposit_id,)).await {
     //     Ok(data) => data,
     //     Err(e) => {
     //         error!("Get deposit by id failed with {}", e);
     //         return Err(e);
     //     }
     // };
-;
-    // let deposit_info: DepositInfo = match rpc_client.request("getDepositInfo", (deposit_txid,)).await {
+
+    // let deposit_info: DepositInfo = match bridge_client.request("getDepositInfo", (deposit_txid,)).await {
     //     Ok(data) => data,
     //     Err(e) => {
     //         error!("Get deposit by id failed with {}", e);
@@ -307,10 +307,10 @@ fn mock_withdrawal_info(operator_idx: u32) -> Vec<WithdrawalInfo> {
     withdrawals
 }
 
-async fn get_withdrawals(strata_client: &HttpClient, bridge_client: &HttpClient, operator_idx: u32) -> Result<Vec<WithdrawalInfo>, ClientError> {
+async fn get_withdrawals(bridge_client: &HttpClient, operator_idx: u32) -> Result<Vec<WithdrawalInfo>, ClientError> {
     let withdrawal_infos = mock_withdrawal_info(operator_idx);
 
-    // let bridge_duties: RpcBridgeDuties = match strata_client.request("getBridgeDuties", (operator_idx, 0)).await {
+    // let bridge_duties: RpcBridgeDuties = match bridge_client.request("getBridgeDuties", operator_idx)).await {
     //     Ok(data) => data,
     //     Err(e) => {
     //         error!("Get bridge duties failed with {}", e);
