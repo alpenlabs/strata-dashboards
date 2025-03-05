@@ -154,7 +154,7 @@ pub async fn bridge_monitoring_task(state: BridgeState, config: &BridgeMonitorin
         for (index, public_key) in operators.0.iter() {
             let operator_id = format!("Alpen Labs #{}", index);
             info!("operator {}", operator_id);
-            let status = get_operator_status(&config, &strata_rpc_client, public_key).await.unwrap();
+            let status = get_operator_status(&config, &strata_rpc_client, *index).await.unwrap();
 
             operator_statuses.push(OperatorStatus {
                 operator_id,
@@ -217,7 +217,7 @@ async fn get_bridge_operators(bridge_client: &HttpClient) -> Result<OperatorPubl
     let operator_table = mock_operator_table();
 
     // Fetch active operator public keys
-    // let operator_table: OperatorPublicKeys = match bridge_client.request("getBridgeOperators", ((),)).await {
+    // let operator_table: OperatorPublicKeys = match bridge_client.request("bridgeOperators", ((),)).await {
     //     Ok(data) => data,
     //     Err(e) => {
     //         error!("Bridge status query failed with {}", e);
@@ -228,11 +228,11 @@ async fn get_bridge_operators(bridge_client: &HttpClient) -> Result<OperatorPubl
     Ok(operator_table)
 }
 
-async fn get_operator_status(config: &BridgeMonitoringConfig, bridge_client: &HttpClient, operator_pk: &String) -> Result<String, ClientError> {
+async fn get_operator_status(config: &BridgeMonitoringConfig, bridge_client: &HttpClient, operator_idx: u32) -> Result<String, ClientError> {
     // Check if operator responds to an RPC request
     // Explicitly define return type as `bool`
     // let ping_result: Result<bool, ClientError> =
-    //     timeout(Duration::from_secs(config.bridge_operator_ping_timeout_s), bridge_client.request("bridgeOperatorHealthCheck", (operator_pk.clone(),)))
+    //     timeout(Duration::from_secs(config.bridge_operator_ping_timeout_s), bridge_client.request("operatorStatus", (operator_idx,)))
     //         .await
     //         .map_err(|_| ClientError::Custom("Timeout".into()))?;
 
@@ -249,7 +249,7 @@ async fn get_operator_status(config: &BridgeMonitoringConfig, bridge_client: &Ht
 
 async fn get_current_deposits(strata_client: &HttpClient) -> Result<Vec<u32>, ClientError> {
     let deposit_ids = vec![1, 2, 3];
-    // let deposit_ids: Vec<u32> = match strata_client.request("getCurrentDeposits", ((),)).await {
+    // let deposit_ids: Vec<u32> = match strata_client.request("strata_getCurrentDeposits", ((),)).await {
     //     Ok(data) => data,
     //     Err(e) => {
     //         error!("Current deposits query failed with {}", e);
@@ -277,7 +277,7 @@ async fn get_deposit_info(strata_client: &HttpClient, bridge_client: &HttpClient
 
     let deposit_info = mock_deposit_info(deposit_id);
 
-    // let deposit_txid: String = match strata_client.request("getCurrentDepositById", (deposit_id,)).await {
+    // let deposit_txid: String = match strata_client.request("strata_getCurrentDepositById", (deposit_id,)).await {
     //     Ok(data) => data,
     //     Err(e) => {
     //         error!("Get deposit by id failed with {}", e);
@@ -285,7 +285,7 @@ async fn get_deposit_info(strata_client: &HttpClient, bridge_client: &HttpClient
     //     }
     // };
 
-    // let deposit_info: DepositInfo = match bridge_client.request("getDepositInfo", (deposit_txid,)).await {
+    // let deposit_info: DepositInfo = match bridge_client.request("depositInfo", (deposit_txid,)).await {
     //     Ok(data) => data,
     //     Err(e) => {
     //         error!("Get deposit by id failed with {}", e);
@@ -310,7 +310,7 @@ fn mock_withdrawal_info(operator_idx: u32) -> Vec<WithdrawalInfo> {
 async fn get_withdrawals(bridge_client: &HttpClient, operator_idx: u32) -> Result<Vec<WithdrawalInfo>, ClientError> {
     let withdrawal_infos = mock_withdrawal_info(operator_idx);
 
-    // let bridge_duties: RpcBridgeDuties = match bridge_client.request("getBridgeDuties", operator_idx)).await {
+    // let bridge_duties: RpcBridgeDuties = match bridge_client.request("bridgeDuties", operator_idx)).await {
     //     Ok(data) => data,
     //     Err(e) => {
     //         error!("Get bridge duties failed with {}", e);
@@ -325,7 +325,7 @@ async fn get_withdrawals(bridge_client: &HttpClient, operator_idx: u32) -> Resul
     //         println!("Calling getWithdrawalInfo for Outpoint: {}", deposit_outpoint);
 
     //         // Call `getWithdrawalInfo(deposit_outpoint)` here
-    //         let wd_info: WithdrawalInfo = match bridge_client.request("getWithdrawalInfo", (deposit_outpoint.clone(), )).await {
+    //         let wd_info: WithdrawalInfo = match bridge_client.request("withdrawalInfo", (deposit_outpoint.clone(), )).await {
     //             Ok(data) => data,
     //             Err(e) => {
     //                 error!("Get withdrawal info failed with {}", e);
