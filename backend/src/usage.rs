@@ -443,10 +443,10 @@ async fn fetch_user_ops(http_client: &reqwest::Client, query_url: &str,
 
     // Extract next_page_token safely
     let next_page_token = data
-    .get("next_page_params")
-    .and_then(|params| params.get("page_token"))
-    .and_then(|token| token.as_str()) // ✅ Get string reference directly
-    .map(|s| s.trim_matches('"').to_string()); // ✅ Remove extra quotes if present
+        .get("next_page_params")
+        .and_then(|params| params.get("page_token"))
+        .and_then(|token| token.as_str()) // ✅ Get string reference directly
+        .map(|s| s.trim_matches('"').to_string()); // ✅ Remove extra quotes if present
 
     Ok(UserOpsResponse {
         user_ops,
