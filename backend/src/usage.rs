@@ -98,9 +98,9 @@ impl UsageMonitoringConfig {
             .unwrap_or_else(|| "http://localhost/api/v2/proxy/account-abstraction/accounts".to_string());
 
         let refresh_interval_s = env::var("USAGE_STATS_REFETCH_INTERVAL_S").ok()
-            .unwrap_or_else(|| "120000".to_string());
+            .unwrap_or_else(|| "120".to_string());
         let refetch_interval_s_u64: u64 = refresh_interval_s.parse().expect("Failed to parse USAGE_STATS_REFETCH_INTERVAL_S as u64");
-        let query_page_size = env::var("USAGE_QUERY_PAGE_SIZE").ok().unwrap_or_else(|| "120000".to_string());
+        let query_page_size = env::var("USAGE_QUERY_PAGE_SIZE").ok().unwrap_or_else(|| "100".to_string());
         let query_page_size_u64: u64 = query_page_size.parse().expect("Failed to parse USAGE_QUERY_PAGE_SIZE as u64");
 
         let usage_stats_keys = UsageMonitoringConfig::load_usage_keys();
