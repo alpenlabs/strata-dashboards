@@ -472,9 +472,8 @@ async fn fetch_accounts(http_client: &reqwest::Client, query_url: &String,
     let next_page_token = data
         .get("next_page_params")
         .and_then(|params| params.get("page_token"))
-        .and_then(|token| Some(token.to_string())); // ✅ Convert JSON to str safely
-        // .and_then(|s| s.split(',').next()) // ✅ Extract first token safely
-        // .and_then(|s| s.parse::<u64>().ok()); // ✅ Convert to u64 safely
+        .and_then(|token| token.as_str()) // ✅ Get string reference directly
+        .map(|s| s.trim_matches('"').to_string()); // ✅ Remove extra quotes if present
 
     Ok(AccountsResponse {
         accounts,
