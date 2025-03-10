@@ -621,7 +621,6 @@ mod tests {
                     {
                         "address": { "hash": "0xabcdef123456" },
                         "creation_timestamp": "2024-03-10T12:00:00Z",
-                        "gas_used": 50
                     }
                 ]
             }).to_string())
@@ -639,7 +638,6 @@ mod tests {
         let accounts = result.accounts;
         assert_eq!(accounts.len(), 1);
         assert_eq!(accounts[0].address, "0xabcdef123456");
-        assert_eq!(accounts[0].gas_used, 50);
         let page_token = result.next_page_token;
         assert!(page_token.is_none())
     }
