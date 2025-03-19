@@ -1,15 +1,14 @@
 use anyhow::anyhow;
 use axum::Json;
 use dotenvy::dotenv;
-use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::ClientError;
-use log::{info, error};
+use log::{info, error, warn};
+use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::{env, sync::Arc, collections::BTreeMap};
 use tokio::{sync::Mutex, time::{timeout, Duration, interval}};
-
 use crate::utils::create_rpc_client;
 
 
@@ -26,7 +25,7 @@ impl BridgeMonitoringConfig {
 
         let strata_rpc_url = env::var("STRATA_RPC_URL").ok()
             .unwrap_or_else(|| {
-                "https://strataseq.temp6-testnet1-staging.stratabtc.org/".to_string()
+                "https://strataclient1ff4bc1df.devnet-annapurna.stratabtc.org".to_string()
             });
 
         let bridge_rpc_url = env::var("STRATA_BRIDGE_RPC_URL").ok()
@@ -143,7 +142,7 @@ pub type BridgeState = Arc<Mutex<BridgeStatus>>;
 
 /// Periodically fetch bridge status and update shared bridge state
 pub async fn bridge_monitoring_task(state: BridgeState, config: &BridgeMonitoringConfig) {
-    let mut interval = interval(tokio::time::Duration::from_secs(config.stats_refetch_interval_s));
+    let mut interval = interval(Duration::from_secs(config.stats_refetch_interval_s));
     let strata_rpc_client = create_rpc_client(&config.strata_rpc_url);
     let bridge_rpc_client = create_rpc_client(&config.bridge_rpc_url);
 
@@ -169,12 +168,17 @@ pub async fn bridge_monitoring_task(state: BridgeState, config: &BridgeMonitorin
         locked_state.operators = operator_statuses;
 
         // Current deposits
-        let current_deposits = get_current_deposits(&bridge_rpc_client).await.unwrap();
+        let current_deposits = get_current_deposits(&strata_rpc_client).await.unwrap();
         info!("current deposits {:?}", current_deposits);
 
         for deposit_id in current_deposits {
             let deposit_info = get_deposit_info(&strata_rpc_client, &bridge_rpc_client, deposit_id).await.unwrap();
-            locked_state.deposits.push(deposit_info);
+            if deposit_info.is_none() {
+                continue;
+            } else {
+                info!("found deposit entry {}", deposit_id);
+                locked_state.deposits.push(deposit_info.unwrap());
+            }
         }
 
         // Withdrawals
@@ -214,17 +218,15 @@ fn mock_operator_table() -> OperatorPublicKeys {
     operator_table
 }
 
-async fn get_bridge_operators(bridge_client: &HttpClient) -> Result<OperatorPublicKeys, ClientError> {
-    let operator_table = mock_operator_table();
-
+async fn get_bridge_operators(strata_client: &HttpClient) -> Result<OperatorPublicKeys, ClientError> {
     // Fetch active operator public keys
-    // let operator_table: OperatorPublicKeys = match bridge_client.request("bridgeOperators", ((),)).await {
-    //     Ok(data) => data,
-    //     Err(e) => {
-    //         error!("Bridge status query failed with {}", e);
-    //         return Err(e);
-    //     }
-    // };
+    let operator_table: OperatorPublicKeys = match strata_client.request("strata_getActiveOperatorChainPubkeySet", ((),)).await {
+        Ok(data) => data,
+        Err(e) => {
+            error!("Bridge status query failed with {}", e);
+            return Err(e);
+        }
+    };
 
     Ok(operator_table)
 }
@@ -233,7 +235,7 @@ async fn get_operator_status(config: &BridgeMonitoringConfig, bridge_client: &Ht
     // Check if operator responds to an RPC request
     // Explicitly define return type as `bool`
     // let ping_result: Result<bool, ClientError> =
-    //     timeout(Duration::from_secs(config.bridge_operator_ping_timeout_s), bridge_client.request("operatorStatus", (operator_idx,)))
+    //     timeout(Duration::from_secs(config.bridge_operator_ping_timeout_s), bridge_client.request("stratabridge_operatorStatus", (operator_idx,)))
     //         .await
     //         .map_err(|_| ClientError::Custom("Timeout".into()))?;
 
@@ -260,31 +262,44 @@ async fn get_current_deposits(strata_client: &HttpClient) -> Result<Vec<u32>, Cl
     Ok(deposit_ids)
 }
 
-fn mock_deposit_info(deposit_txid: String) -> DepositInfo {
-    let deposit_info = DepositInfo {
-        deposit_request_txid: format!("0xabcdefgh{}", deposit_txid).into(),
-        deposit_txid: Some(deposit_txid.clone()),
-        mint_txid: Some(format!("0xqrstuvwx{}", deposit_txid).into()),
-        status: "Accepted".to_string(),
-    };
-
-    deposit_info
+fn mock_deposit_info(deposit_outpoint: String, deposit_status: String) -> DepositInfo {
+    let output_prefix: String = deposit_outpoint.chars().take(10).collect();
+    DepositInfo {
+        deposit_request_txid: format!("0xabcdefgh{}", output_prefix).into(),
+        deposit_txid: format!("0x12345678{}", output_prefix).into(),
+        mint_txid: Some(format!("0xqrstuvwx{}", output_prefix).into()),
+        status: deposit_status,
+    }
 }
 
-async fn get_deposit_info(strata_client: &HttpClient, bridge_client: &HttpClient, deposit_id: u32) -> Result<DepositInfo, ClientError> {
+async fn get_deposit_info(strata_client: &HttpClient, bridge_client: &HttpClient, deposit_id: u32) -> Result<Option<DepositInfo>, ClientError> {
 
-    let response: Value = strata_client
+    let response: Value = match strata_client
         .request("strata_getCurrentDepositById", (deposit_id,))
-        .await?;
+        .await
+    {
+        Ok(resp) => {
+            info!("deposit entry {:?}", resp);
+            resp
+        }
+        Err(e) => {
+            warn!("⚠️ Skipping deposit {} due to RPC error: {}", deposit_id, e);
+            return Ok(None);
+        }
+    };
 
-    // ✅ Extract "deposit_txid" from JSON response
-    let deposit_txid = response.get("deposit_txid")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| ClientError::Custom("Missing deposit txid".to_string()))?;
+    // ✅ Extract "deposit_txid", return None if missing
+    let deposit_outpoint = response.get("output")
+        .and_then(|v| Some(v.to_string().trim_matches('"').to_string()));
+    let deposit_status = response.get("state")
+        .and_then(|state| state.as_object())  // Convert to JSON object
+        .and_then(|state_obj| state_obj.keys().next()) // Get the first key
+        .map(|key| key.to_string())  // Convert key to String
+        .unwrap_or("-".to_string()); // Default to "-" if missing
+    let deposit_info = mock_deposit_info(deposit_outpoint.unwrap(), deposit_status);
+    info!("deposit info {:?}", deposit_info);
 
-    let deposit_info = mock_deposit_info(deposit_txid.to_string());
-
-    // let deposit_info: DepositInfo = match bridge_client.request("depositInfo", (deposit_txid,)).await {
+    // let deposit_info: DepositInfo = match bridge_client.request("stratabridge_depositInfo", (deposit_outpoint,)).await {
     //     Ok(data) => data,
     //     Err(e) => {
     //         error!("Get deposit by id failed with {}", e);
@@ -292,7 +307,7 @@ async fn get_deposit_info(strata_client: &HttpClient, bridge_client: &HttpClient
     //     }
     // };
 
-    Ok(deposit_info)
+    Ok(Some(deposit_info))
 }
 
 fn mock_withdrawal_info(operator_idx: u32) -> Vec<WithdrawalInfo> {
@@ -309,7 +324,7 @@ fn mock_withdrawal_info(operator_idx: u32) -> Vec<WithdrawalInfo> {
 async fn get_withdrawals(bridge_client: &HttpClient, operator_idx: u32) -> Result<Vec<WithdrawalInfo>, ClientError> {
     let withdrawal_infos = mock_withdrawal_info(operator_idx);
 
-    // let bridge_duties: RpcBridgeDuties = match bridge_client.request("bridgeDuties", operator_idx)).await {
+    // let bridge_duties: RpcBridgeDuties = match bridge_client.request("stratabridge_bridgeDuties", operator_idx)).await {
     //     Ok(data) => data,
     //     Err(e) => {
     //         error!("Get bridge duties failed with {}", e);
@@ -324,7 +339,7 @@ async fn get_withdrawals(bridge_client: &HttpClient, operator_idx: u32) -> Resul
     //         println!("Calling getWithdrawalInfo for Outpoint: {}", deposit_outpoint);
 
     //         // Call `getWithdrawalInfo(deposit_outpoint)` here
-    //         let wd_info: WithdrawalInfo = match bridge_client.request("withdrawalInfo", (deposit_outpoint.clone(), )).await {
+    //         let wd_info: WithdrawalInfo = match bridge_client.request("stratabridge_withdrawalInfo", (deposit_outpoint.clone(), )).await {
     //             Ok(data) => data,
     //             Err(e) => {
     //                 error!("Get withdrawal info failed with {}", e);
@@ -359,7 +374,7 @@ fn mock_reimbursement_infos() -> Vec<ReimbursementInfo> {
 async fn get_reimbursements(bridge_client: &HttpClient) -> Result<Vec<ReimbursementInfo>, ClientError> {
     let reimbursement_infos = mock_reimbursement_infos();
 
-    // let claim_txids: Vec<String> = match bridge_client.request("getClaims", ((),)).await {
+    // let claim_txids: Vec<String> = match bridge_client.request("stratabridge_getClaims", ((),)).await {
     //     Ok(data) => data,
     //     Err(e) => {
     //         error!("Get bridge claims failed with {}", e);
@@ -370,7 +385,7 @@ async fn get_reimbursements(bridge_client: &HttpClient) -> Result<Vec<Reimbursem
     // let mut reimbursement_infos = Vec::new();
     // for txid in claim_txids.iter() {
         // Call `getWithdrawalInfo(deposit_outpoint)` here
-        // let reimb_info: ReimbursementInfo = match rpc_client.request("getClaimInfo", (txid.clone(), )).await {
+        // let reimb_info: ReimbursementInfo = match rpc_client.request("stratabridge_getClaimInfo", (txid.clone(), )).await {
         //     Ok(data) => data,
         //     Err(e) => {
         //         error!("Get claim info failed with {}", e);
