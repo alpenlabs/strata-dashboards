@@ -9,7 +9,6 @@ export type OperatorStatus = {
 export type DepositInfo = {
     deposit_request_txid: string,
     deposit_txid: string,
-    mint_txid: string,
     status: string,
 }
 

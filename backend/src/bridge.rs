@@ -99,7 +99,6 @@ struct RpcBridgeDuties {
 pub struct DepositInfo {
     pub deposit_request_txid: String,
     pub deposit_txid: Option<String>,
-    pub mint_txid: Option<String>,
     pub status: String,
 }
 
@@ -155,7 +154,6 @@ pub async fn bridge_monitoring_task(state: BridgeState, config: &BridgeMonitorin
         let mut operator_statuses = Vec::new();
         for (index, public_key) in operators.0.iter() {
             let operator_id = format!("Alpen Labs #{}", index);
-            info!("operator {}", operator_id);
             let status = get_operator_status(&config, &strata_rpc_client, *index).await.unwrap();
 
             operator_statuses.push(OperatorStatus {
@@ -173,11 +171,11 @@ pub async fn bridge_monitoring_task(state: BridgeState, config: &BridgeMonitorin
 
         for deposit_id in current_deposits {
             let deposit_info = get_deposit_info(&strata_rpc_client, &bridge_rpc_client, deposit_id).await.unwrap();
-            if deposit_info.is_none() {
-                continue;
-            } else {
+            if deposit_info.is_some() {
                 info!("found deposit entry {}", deposit_id);
                 locked_state.deposits.push(deposit_info.unwrap());
+            } else {
+                warn!("Missing deposit entry for idx {}", deposit_id);
             }
         }
 
@@ -205,19 +203,6 @@ pub async fn bridge_monitoring_task(state: BridgeState, config: &BridgeMonitorin
     }
 }
 
-// Mock operator data for testing
-fn mock_operator_table() -> OperatorPublicKeys {
-    let mut operator_table = OperatorPublicKeys {
-        0: BTreeMap::new(),
-    };
-
-    for i in 1..=3 {
-        operator_table.0.insert(i, format!("0xdeadbeef{}", i).to_string());
-    }
-
-    operator_table
-}
-
 async fn get_bridge_operators(strata_client: &HttpClient) -> Result<OperatorPublicKeys, ClientError> {
     // Fetch active operator public keys
     let operator_table: OperatorPublicKeys = match strata_client.request("strata_getActiveOperatorChainPubkeySet", ((),)).await {
@@ -234,20 +219,22 @@ async fn get_bridge_operators(strata_client: &HttpClient) -> Result<OperatorPubl
 async fn get_operator_status(config: &BridgeMonitoringConfig, bridge_client: &HttpClient, operator_idx: u32) -> Result<String, ClientError> {
     // Check if operator responds to an RPC request
     // Explicitly define return type as `bool`
-    // let ping_result: Result<bool, ClientError> =
-    //     timeout(Duration::from_secs(config.bridge_operator_ping_timeout_s), bridge_client.request("stratabridge_operatorStatus", (operator_idx,)))
-    //         .await
-    //         .map_err(|_| ClientError::Custom("Timeout".into()))?;
+    let status = timeout(
+            Duration::from_secs(config.bridge_operator_ping_timeout_s),
+            bridge_client.request("stratabridge_operatorStatus", (operator_idx,))
+        )
+        .await
+        .map_err(|_| ClientError::Custom("Timeout".into())) // ❌ Timeout → Return error
+        .and_then(|res| res.map_err(|_| ClientError::Custom("RPC Error".into()))) // ❌ RPC failure → Error
+        .unwrap_or(false); // ❌ Any failure → Default to `false` (Offline)
 
-    // let status = if ping_result.is_ok() && ping_result.unwrap() {
-    //     "Online".to_string()
-    // } else {
-    //     "Offline".to_string()
-    // };
+    let status = if status {
+        "Online".to_string()
+    } else {
+        "Offline".to_string()
+    };
 
-    // Ok(status)
-
-    Ok("Online".to_string())
+    Ok(status)
 }
 
 async fn get_current_deposits(strata_client: &HttpClient) -> Result<Vec<u32>, ClientError> {
@@ -265,9 +252,8 @@ async fn get_current_deposits(strata_client: &HttpClient) -> Result<Vec<u32>, Cl
 fn mock_deposit_info(deposit_outpoint: String, deposit_status: String) -> DepositInfo {
     let output_prefix: String = deposit_outpoint.chars().take(10).collect();
     DepositInfo {
-        deposit_request_txid: format!("0xabcdefgh{}", output_prefix).into(),
-        deposit_txid: format!("0x12345678{}", output_prefix).into(),
-        mint_txid: Some(format!("0xqrstuvwx{}", output_prefix).into()),
+        deposit_request_txid: format!("abcdefgh{}", output_prefix).into(),
+        deposit_txid: format!("12345678{}", output_prefix).into(),
         status: deposit_status,
     }
 }
@@ -292,10 +278,23 @@ async fn get_deposit_info(strata_client: &HttpClient, bridge_client: &HttpClient
     let deposit_outpoint = response.get("output")
         .and_then(|v| Some(v.to_string().trim_matches('"').to_string()));
     let deposit_status = response.get("state")
-        .and_then(|state| state.as_object())  // Convert to JSON object
-        .and_then(|state_obj| state_obj.keys().next()) // Get the first key
-        .map(|key| key.to_string())  // Convert key to String
-        .unwrap_or("-".to_string()); // Default to "-" if missing
+        .and_then(|state| {
+            if let Some(state_str) = state.as_str() {
+                Some(state_str.to_string()) // ✅ Case 1: State is a String
+            } else if let Some(state_obj) = state.as_object() {
+                state_obj.keys().next().map(|key| key.to_string()) // ✅ Case 2: State is an Object
+            } else {
+                None
+            }
+        })
+        .map(|state| {
+            let mut chars = state.chars();
+            chars.next()
+                .map(|c| c.to_uppercase().to_string() + chars.as_str())
+                .unwrap_or(state) // Handle empty string case
+        })
+        .unwrap_or("-".to_string()); // Default to "Unknown" if missing
+
     let deposit_info = mock_deposit_info(deposit_outpoint.unwrap(), deposit_status);
     info!("deposit info {:?}", deposit_info);
 
@@ -313,8 +312,8 @@ async fn get_deposit_info(strata_client: &HttpClient, bridge_client: &HttpClient
 fn mock_withdrawal_info(operator_idx: u32) -> Vec<WithdrawalInfo> {
     let mut withdrawals = Vec::new();
     withdrawals.push(WithdrawalInfo {
-        withdrawal_request_txid: format!("0xaabbccddee{}", operator_idx).to_string(),
-        fulfillment_txid: Some(format!("0xffcdbade{}", operator_idx).to_string()),
+        withdrawal_request_txid: format!("aabbccddee{}", operator_idx).to_string(),
+        fulfillment_txid: Some(format!("ffcdbade{}", operator_idx).to_string()),
     status: "Accepted".to_string(),
     });
 
@@ -361,8 +360,8 @@ fn mock_reimbursement_infos() -> Vec<ReimbursementInfo> {
     for i in 1..=4 {
         reimbursements.push(
             ReimbursementInfo {
-                claim_txid: format!("0xfedcbaabcdef123{}", i).to_string(),
-                payout_txid: Some(format!("0x123fedcbaabcdef{}", i).to_string()),
+                claim_txid: format!("fedcbaabcdef123{}", i).to_string(),
+                payout_txid: Some(format!("123fedcbaabcdef{}", i).to_string()),
                 challenge_step: "N/A".to_string(),
                 status: "Complete".to_string(),
         });

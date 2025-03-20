@@ -2,10 +2,10 @@ import { Suspense } from "react";
 import { useLocation } from "react-router-dom";
 import { useBridgeStatus, OperatorStatus, DepositInfo, WithdrawalInfo, ReimbursementInfo } from "../hooks/useBridgeStatus";
 
-const truncateTxid = (txid: string, startLength = 6, endLength = 6) => {
-    if (!txid) return "-"; // If no TXID, show "-"
-    if (txid.length <= startLength + endLength) return txid; // If short, return as is
-    return `${txid.slice(0, startLength)}...${txid.slice(-endLength)}`;
+const truncateHex = (hex: string, startLength = 4, endLength = 4) => {
+    if (!hex) return "-"; // If no TXID, show "-"
+    if (hex.length <= startLength + endLength) return hex; // If short, return as is
+    return `${hex.slice(0, startLength)}...${hex.slice(-endLength)}`;
 };
 
 export default function Bridge() {
@@ -18,7 +18,7 @@ export default function Bridge() {
             {/* Bridge Status Page */}
             {pathname === "/bridge" && (
                 <div>
-                    {!data || error ? <p className="error-text">Error loading data</p> : null}
+                    {! data || error && <p className="error-text">Error loading data</p>}
                     <Suspense fallback={<p className="loading-text">Loading...</p>}>
                         {isLoading ? (
                             <p className="loading-text">Loading...</p>
@@ -33,7 +33,7 @@ export default function Bridge() {
                                                     {data.operators.map((operator: OperatorStatus, index: number) => (
                                                         <tr key={index} className="operators-row">
                                                             <td className="table-cell">{operator.operator_id}</td>
-                                                            <td className="table-cell">{operator.operator_address}</td>
+                                                            <td className="table-cell">{truncateHex(operator.operator_address)}</td>
                                                             <td className="table-cell">{operator.status}</td>
                                                         </tr>
                                                     ))}
@@ -53,16 +53,14 @@ export default function Bridge() {
                                                     <tr className="transactions-header">
                                                         <th>Deposit Request TXID</th>
                                                         <th>Deposit TXID</th>
-                                                        <th>Mint TXID</th>
                                                         <th>Status</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {data.deposits.map((deposit: DepositInfo, index: number) => (
                                                         <tr key={index} className="transactions-row">
-                                                            <td className="table-cell">{truncateTxid(deposit.deposit_request_txid)}</td>
-                                                            <td className="table-cell">{truncateTxid(deposit.deposit_txid)}</td>
-                                                            <td className="table-cell">{truncateTxid(deposit.mint_txid)}</td>
+                                                            <td className="table-cell">{truncateHex(deposit.deposit_request_txid)}</td>
+                                                            <td className="table-cell">{truncateHex(deposit.deposit_txid)}</td>
                                                             <td className="table-cell">{deposit.status}</td>
                                                         </tr>
                                                     ))}
@@ -88,8 +86,8 @@ export default function Bridge() {
                                                 <tbody>
                                                     {data.withdrawals.map((withdrawal: WithdrawalInfo, index: number) => (
                                                         <tr key={index} className="transactions-row">
-                                                            <td className="table-cell">{truncateTxid(withdrawal.withdrawal_request_txid)}</td>
-                                                            <td className="table-cell">{truncateTxid(withdrawal.fulfillment_txid)}</td>
+                                                            <td className="table-cell">{truncateHex(withdrawal.withdrawal_request_txid)}</td>
+                                                            <td className="table-cell">{truncateHex(withdrawal.fulfillment_txid)}</td>
                                                             <td className="table-cell">{withdrawal.status}</td>
                                                         </tr>
                                                     ))}
@@ -116,9 +114,9 @@ export default function Bridge() {
                                                 <tbody>
                                                     {data.reimbursements.map((reimbursement: ReimbursementInfo, index: number) => (
                                                         <tr key={index} className="transactions-row">
-                                                            <td className="table-cell">{truncateTxid(reimbursement.claim_txid)}</td>
-                                                            <td className="table-cell">{truncateTxid(reimbursement.challenge_step)}</td>
-                                                            <td className="table-cell">{truncateTxid(reimbursement.payout_txid)}</td>
+                                                            <td className="table-cell">{truncateHex(reimbursement.claim_txid)}</td>
+                                                            <td className="table-cell">{truncateHex(reimbursement.challenge_step)}</td>
+                                                            <td className="table-cell">{truncateHex(reimbursement.payout_txid)}</td>
                                                             <td className="table-cell">{reimbursement.status}</td>
                                                         </tr>
                                                     ))}
