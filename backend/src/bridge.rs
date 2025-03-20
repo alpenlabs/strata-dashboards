@@ -4,9 +4,9 @@ use dotenvy::dotenv;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::ClientError;
 use log::{info, error, warn};
-use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
+use jsonrpsee::http_client::HttpClient;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::{env, sync::Arc, collections::BTreeMap};
 use tokio::{sync::Mutex, time::{timeout, Duration, interval}};
 use crate::utils::create_rpc_client;
@@ -65,7 +65,7 @@ struct OperatorPublicKeys(BTreeMap<u32, String>); // OperatorIdx -> PublicKey
 /// Enum to handle deposit and withdrawal operations without relying on a "type" field
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]  // This allows Serde to determine the type based on the structure
-pub enum BridgeDuty {
+enum BridgeDuty {
     Deposit(RpcDepositInfo),
     Withdrawal(RpcWithdrawalInfo),
 }
