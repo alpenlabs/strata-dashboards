@@ -115,7 +115,7 @@ export default function Bridge() {
                                                     {data.reimbursements.map((reimbursement: ReimbursementInfo, index: number) => (
                                                         <tr key={index} className="transactions-row">
                                                             <td className="table-cell">{truncateHex(reimbursement.claim_txid)}</td>
-                                                            <td className="table-cell">{truncateHex(reimbursement.challenge_step)}</td>
+                                                            <td className="table-cell">{reimbursement.challenge_step}</td>
                                                             <td className="table-cell">{truncateHex(reimbursement.payout_txid)}</td>
                                                             <td className="table-cell">{reimbursement.status}</td>
                                                         </tr>

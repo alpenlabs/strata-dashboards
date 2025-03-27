@@ -1,0 +1,28 @@
+[package]
+name = "mock_rpc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.95"
+async-trait = "0.1.81"
+axum = "0.7"
+bitcoin = { version = "0.32.5", features = ["rand-std", "serde"] }
+env_logger = "0.11.6"
+jsonrpsee = { version = "0.24", features = ["server", "macros"] }
+jsonrpsee-types = "0.24"
+log = "0.4.25"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", default-features = false, features = [
+  "alloc",
+  "raw_value",
+] }
+tokio = { version = "1", features = ["full"] }
+tower = "0.4"
+
+strata-bridge-rpc = { git = "https://github.com/alpenlabs/strata-bridge.git", features = ["client"]}
+strata-bridge-primitives = { git = "https://github.com/alpenlabs/strata-bridge.git" }
+
+[[bin]]
+name = "mock_rpc"
+path = "src/main.rs"

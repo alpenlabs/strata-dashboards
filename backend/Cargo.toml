@@ -4,19 +4,22 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum = { version = "0.8" }
-tokio = { version = "1", features = ["full"] }
 anyhow = "1.0"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-tower-http = { version = "0.5", features = ["cors"] }
-jsonrpsee = { version = "0.24", features = ["http-client"] }
-reqwest = { version = "0.12.12", features = ["json"] }
-dotenvy = "0.15"
+axum = { version = "0.8" }
 clap = { version = "4.5", features = ["derive"] }
 chrono = "0.4.38"
+dotenvy = "0.15"
 env_logger = "0.11.6"
+jsonrpsee = { version = "0.24", features = ["http-client"] }
 log = "0.4.25"
+reqwest = { version = "0.12.12", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.5", features = ["cors"] }
+
+strata-bridge-rpc = { git = "https://github.com/alpenlabs/strata-bridge.git", features = ["client"]}
+strata-bridge-primitives = { git = "https://github.com/alpenlabs/strata-bridge.git" }
 
 [dev-dependencies]
 mockito = "1.6.1"
