@@ -12,8 +12,8 @@ async fn main() -> anyhow::Result<()> {
     let strata_rpc = MockStrataRpc::load_from_files("mock_data/strata_rpc")?;
     let bridge_rpc = MockBridgeMonitoring::load_from_files("mock_data/bridge_rpc")?;
 
-    let strata_addr = "127.0.0.1:8545";
-    let bridge_addr = "127.0.0.1:8546";
+    let strata_addr = "0.0.0.0:8545";
+    let bridge_addr = "0.0.0.0:8546";
 
     let bridge_module = StrataBridgeMonitoringApiServer::into_rpc(bridge_rpc);
     let strata_module = StrataRpcServer::into_rpc(strata_rpc);
