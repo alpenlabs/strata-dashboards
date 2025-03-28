@@ -41,11 +41,11 @@ impl BridgeMonitoringConfig {
 
         let strata_rpc_url = env::var("STRATA_RPC_URL").ok()
             .unwrap_or_else(|| {
-                "http://0.0.0.1:8545".to_string()
+                "http://0.0.0.0:8545".to_string()
             });
 
         let bridge_rpc_url = env::var("STRATA_BRIDGE_RPC_URL").ok()
-            .unwrap_or_else(|| "http://0.0.0.1:8546".to_string());
+            .unwrap_or_else(|| "http://0.0.0.0:8546".to_string());
 
         let refresh_interval_s: u64 = std::env::var("BRIDGE_STATUS_REFETCH_INTERVAL_S")
             .ok()
@@ -70,12 +70,20 @@ pub struct OperatorStatus {
     status: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum DepositStatus {
+    #[serde(rename = "In progress")]
+    InProgress,
+    Failed,
+    Complete,
+}
+
 /// Deposit information passed to dashboard
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DepositInfo {
     pub deposit_request_txid: Txid,
     pub deposit_txid: Option<Txid>,
-    pub status: String,
+    pub status: DepositStatus,
 }
 
 impl From<RpcDepositInfo> for DepositInfo {
@@ -84,7 +92,7 @@ impl From<RpcDepositInfo> for DepositInfo {
             RpcDepositStatus::InProgress { deposit_request_txid } => DepositInfo {
                 deposit_request_txid: deposit_request_txid,
                 deposit_txid: None,
-                status: "In progress".to_string(),
+                status: DepositStatus::InProgress,
             },
             RpcDepositStatus::Failed { 
                 deposit_request_txid, 
@@ -92,7 +100,7 @@ impl From<RpcDepositInfo> for DepositInfo {
             } => DepositInfo {
                 deposit_request_txid: deposit_request_txid,
                 deposit_txid: None,
-                status: "Failed".to_string(),
+                status: DepositStatus::Failed,
             },
             RpcDepositStatus::Complete { 
                 deposit_request_txid, 
@@ -100,7 +108,7 @@ impl From<RpcDepositInfo> for DepositInfo {
             } => DepositInfo {
                 deposit_request_txid: deposit_request_txid,
                 deposit_txid: Some(deposit_txid),
-                status: "Complete".to_string(),
+                status: DepositStatus::Complete,
             },
         }
     }
@@ -112,12 +120,20 @@ struct DepositToWithdrawal {
     withdrawal_request_txid: Option<Txid>,
 }
 
+/// Withdrawal status
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum WithdrawalStatus {
+    #[serde(rename = "In progress")]
+    InProgress,
+    Complete,
+}
+
 /// Withdrawal information passed to dashboard
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct WithdrawalInfo {
     pub withdrawal_request_txid: Txid,
     pub fulfillment_txid: Option<Txid>,
-    pub status: String,
+    pub status: WithdrawalStatus,
 }
 
 impl WithdrawalInfo {
@@ -129,15 +145,25 @@ impl WithdrawalInfo {
             RpcWithdrawalStatus::InProgress => Self {
                 withdrawal_request_txid,
                 fulfillment_txid: None,
-                status: "In progress".to_string(),
+                status: WithdrawalStatus::InProgress,
             },
             RpcWithdrawalStatus::Complete { fulfillment_txid } => Self {
                 withdrawal_request_txid,
                 fulfillment_txid: Some(fulfillment_txid.clone()),
-                status: "Complete".to_string(),
+                status: WithdrawalStatus::Complete,
             },
         }
     }
+}
+
+/// Reimbursement status
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum ReimbursementStatus {
+    #[serde(rename = "In progress")]
+    InProgress,
+    Challenged,
+    Cancelled,
+    Complete,
 }
 
 /// Claim and reimbursement information passed to dashboard
@@ -146,7 +172,7 @@ pub struct ReimbursementInfo {
     pub claim_txid: Txid,
     pub challenge_step: String,
     pub payout_txid: Option<Txid>,
-    pub status: String,
+    pub status: ReimbursementStatus,
 }
 
 impl From<&RpcClaimInfo> for ReimbursementInfo {
@@ -156,25 +182,25 @@ impl From<&RpcClaimInfo> for ReimbursementInfo {
                 claim_txid: rpc_info.claim_txid,
                 challenge_step: format!("{:?}", challenge_step),
                 payout_txid: None,
-                status: "In progress".to_string(),
+                status: ReimbursementStatus::InProgress,
             },
             RpcReimbursementStatus::Challenged { challenge_step } => Self {
                 claim_txid: rpc_info.claim_txid,
                 challenge_step: format!("{:?}", challenge_step),
                 payout_txid: None,
-                status: "Challenged".to_string(),
+                status: ReimbursementStatus::Challenged,
             },
             RpcReimbursementStatus::Cancelled => Self {
                 claim_txid: rpc_info.claim_txid,
                 challenge_step: "N/A".to_string(),
                 payout_txid: None,
-                status: "Cancelled".to_string(),
+                status: ReimbursementStatus::Cancelled,
             },
             RpcReimbursementStatus::Complete { payout_txid } => Self {
                 claim_txid: rpc_info.claim_txid,
                 challenge_step: "N/A".to_string(),
                 payout_txid: Some(payout_txid.clone()),
-                status: "Complete".to_string(),
+                status: ReimbursementStatus::Complete,
             },
         }
     }
