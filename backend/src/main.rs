@@ -10,7 +10,7 @@ use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::core::client::ClientT;
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
-use tokio::{net::TcpListener, time::{interval, Duration}, sync::Mutex};
+use tokio::{net::TcpListener, time::{interval, Duration}, sync::RwLock};
 use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber;
 use tracing::{info, error};
@@ -40,13 +40,13 @@ struct NetworkStatus {
     bundler_endpoint: Status,
 }
 
-// Shared State
-type SharedState = Arc<Mutex<NetworkStatus>>;
+/// Shared Network State
+type SharedNetworkState = Arc<RwLock<NetworkStatus>>;
 
 /// Calls `strata_syncStatus` using `jsonrpsee`
 async fn call_rpc_status(client: &HttpClient) -> Status {
     let response: Result<serde_json::Value, _> = client.request("strata_syncStatus", Vec::<()>::new()).await;
-    
+
     match response {
         Ok(json) => {
             info!(?json, "RPC Response");
@@ -76,7 +76,7 @@ async fn check_bundler_health(client: &reqwest::Client, config: &Config) -> Stat
 }
 
 /// Periodically fetches real statuses
-async fn fetch_statuses_task(state: SharedState, config: &Config) {
+async fn fetch_statuses_task(state: SharedNetworkState, config: &Config) {
     info!("Fetching statuses...");
     let mut interval = interval(Duration::from_secs(10));
     let rpc_client = create_rpc_client(&config.rpc_url());
@@ -97,14 +97,14 @@ async fn fetch_statuses_task(state: SharedState, config: &Config) {
 
         info!(?new_status, "Updated Status");
 
-        let mut locked_state = state.lock().await;
+        let mut locked_state = state.write().await;
         *locked_state = new_status;
     }
 }
 
 /// Handler to get the current network status
-async fn get_network_status(state: SharedState) -> Json<NetworkStatus> {
-    let data = state.lock().await.clone();
+async fn get_network_status(state: SharedNetworkState) -> Json<NetworkStatus> {
+    let data = state.read().await.clone();
     Json(data)
 }
 

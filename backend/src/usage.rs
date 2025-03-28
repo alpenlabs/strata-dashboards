@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde::de::{self, Deserializer};
 use serde_json::Value;
 use std::{fs, env, sync::Arc, collections::{HashMap, HashSet}};
-use tokio::{sync::Mutex, time::interval};
+use tokio::{sync::RwLock, time::interval};
 use tracing::{error, info};
 
 
@@ -137,13 +137,13 @@ struct UserOp {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UsageStats {
-    // Usage stats
-    // First level key is the name of stat. See USAGE_STATS in `usage_keys.json`.
-    // Second level key is time period. See TIME_WINDOWS in `usage_keys.json`.
+    /// Usage stats:
+    /// First level key is the name of stat. See USAGE_STATS in `usage_keys.json`.
+    /// Second level key is time period. See TIME_WINDOWS in `usage_keys.json`.
     stats: HashMap<String, HashMap<String, u64>>,
 
-    // Selected accounts: e.g. recently deployed, top gas consumers
-    // First level key is the name of stat. See SELECTED_ACCOUNTS in `usage_keys.json`.
+    /// Selected accounts: e.g. recently deployed, top gas consumers
+    /// First level key is the name of stat. See SELECTED_ACCOUNTS in `usage_keys.json`.
     selected_accounts: HashMap<String, Vec<Account>>,
 }
 
@@ -170,8 +170,8 @@ impl UsageStats {
     }
 }
 
-// Shared usage stats
-pub type SharedUsageStats = Arc<Mutex<UsageStats>>;
+/// Shared usage stats
+pub type SharedUsageStats = Arc<RwLock<UsageStats>>;
 
 type UniqueAccounts = HashMap<String, HashSet<String>>;
 type AccountsGasUsage = HashMap<String, u64>;
@@ -194,7 +194,7 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
             start_time = time_30d_earlier;
         }
 
-        let mut locked_stats = shared_stats.lock().await;
+        let mut locked_stats = shared_stats.write().await;
         let result = fetch_user_ops(&http_client, &config.user_ops_query_url, start_time, now).await;
 
         // Aggregate gas used per sender (in the last 24 hours)
@@ -417,7 +417,7 @@ async fn fetch_accounts(http_client: &reqwest::Client, query_url: &String,
 }
 
 pub async fn get_usage_stats(state: SharedUsageStats) -> Json<UsageStats> {
-    let data = state.lock().await.clone();
+    let data = state.read().await.clone();
     Json(data)
 }
 

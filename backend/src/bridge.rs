@@ -17,17 +17,21 @@ use strata_bridge_rpc::types::{
     RpcClaimInfo,
     RpcReimbursementStatus,
 };
-use tokio::{sync::Mutex, time::{Duration, interval}};
+use tokio::{sync::RwLock, time::{Duration, interval}};
 use tracing::{info, error, warn};
 
 use crate::utils::create_rpc_client;
 
-/// Default bridge status refetch interval
+/// Default bridge status refetch interval in seconds
 const DEFAULT_BRIDGE_STATUS_REFETCH_INTERVAL_S: u64 = 120_000;
 
+/// Bridge monitoring configuration
 pub struct BridgeMonitoringConfig {
+    /// Strata RPC url
     strata_rpc_url: String,
+    /// Strata bridge RPC url
     bridge_rpc_url: String,
+    /// Bridge status refecth interval in seconds
     stats_refetch_interval_s: u64,
 }
 
@@ -58,6 +62,7 @@ impl BridgeMonitoringConfig {
     }
 }
 
+/// Bridge operator status
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OperatorStatus {
     operator_id: String,
@@ -65,6 +70,7 @@ pub struct OperatorStatus {
     status: String,
 }
 
+/// Deposit information passed to dashboard
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DepositInfo {
     pub deposit_request_txid: Txid,
@@ -106,6 +112,7 @@ struct DepositToWithdrawal {
     withdrawal_request_txid: Option<Txid>,
 }
 
+/// Withdrawal information passed to dashboard
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct WithdrawalInfo {
     pub withdrawal_request_txid: Txid,
@@ -133,6 +140,7 @@ impl WithdrawalInfo {
     }
 }
 
+/// Claim and reimbursement information passed to dashboard
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ReimbursementInfo {
     pub claim_txid: Txid,
@@ -180,8 +188,8 @@ pub struct BridgeStatus {
     reimbursements: Vec<ReimbursementInfo>,
 }
 
-// Shared usage stats
-pub type SharedBridgeState = Arc<Mutex<BridgeStatus>>;
+/// Shared usage stats
+pub type SharedBridgeState = Arc<RwLock<BridgeStatus>>;
 
 /// Periodically fetch bridge status and update shared bridge state
 pub async fn bridge_monitoring_task(state: SharedBridgeState, config: &BridgeMonitoringConfig) {
@@ -191,7 +199,7 @@ pub async fn bridge_monitoring_task(state: SharedBridgeState, config: &BridgeMon
 
     loop {
         interval.tick().await;
-        let mut locked_state = state.lock().await;
+        let mut locked_state = state.write().await;
 
         // Bridge operator status
         let operators = get_bridge_operators(&bridge_rpc).await.unwrap();
@@ -380,6 +388,6 @@ async fn get_reimbursements(bridge_rpc: &HttpClient) -> Result<Vec<Reimbursement
 }
 
 pub async fn get_bridge_status(state: SharedBridgeState) -> Json<BridgeStatus> {
-    let data = state.lock().await.clone();
+    let data = state.read().await.clone();
     Json(data)
 }
