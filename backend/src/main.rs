@@ -5,19 +5,19 @@ mod bridge;
 mod usage;
 
 use axum::{routing::get, Json, Router};
-use log::info;
 use dotenvy::dotenv;
 use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::core::client::ClientT;
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::{net::TcpListener, time::{interval, Duration}, sync::Mutex};
-
 use tower_http::cors::{Any, CorsLayer};
-use config::Config;
+use tracing_subscriber;
+use tracing::{info, error};
 
+use config::Config;
 use crate::wallets::{ SharedWallets, fetch_balances_task, get_wallets_with_balances, init_paymaster_wallets};
-use bridge::{BridgeMonitoringConfig, BridgeStatus, bridge_monitoring_task, get_bridge_status};
+use bridge::{BridgeMonitoringConfig, SharedBridgeState, bridge_monitoring_task, get_bridge_status};
 use crate::utils::create_rpc_client;
 use crate::usage::{
     UsageMonitoringConfig,
@@ -49,7 +49,7 @@ async fn call_rpc_status(client: &HttpClient) -> Status {
     
     match response {
         Ok(json) => {
-            info!("RPC Response: {:?}", json);
+            info!(?json, "RPC Response");
             if json.get("tip_height").is_some() {
                 Status::Online
             } else {
@@ -57,7 +57,7 @@ async fn call_rpc_status(client: &HttpClient) -> Status {
             }
         }
         Err(e) => {
-            info!("🔹 error: {}", e);
+            error!(error = %e, "Could not get status");
             Status::Offline
         }
     }
@@ -95,7 +95,7 @@ async fn fetch_statuses_task(state: SharedState, config: &Config) {
             bundler_endpoint,
         };
 
-        info!("Updated Status: {:?}", new_status);
+        info!(?new_status, "Updated Status");
 
         let mut locked_state = state.lock().await;
         *locked_state = new_status;
@@ -110,8 +110,9 @@ async fn get_network_status(state: SharedState) -> Json<NetworkStatus> {
 
 #[tokio::main]
 async fn main() {
-    // ✅ Initialize logger with info level
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    tracing_subscriber::fmt::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
 
     dotenv().ok();
 
@@ -119,7 +120,7 @@ async fn main() {
 
     let cors = CorsLayer::new().allow_origin(Any);
 
-    // 🔹 Shared state for network status
+    // Shared state for network status
     let shared_state = Arc::new(Mutex::new(NetworkStatus {
         batch_producer: Status::Offline, // Default state
         rpc_endpoint: Status::Offline,
@@ -128,7 +129,7 @@ async fn main() {
 
     let paymaster_wallets: SharedWallets = init_paymaster_wallets(&config.clone());
 
-    // 🔹 Spawn a background task to fetch real statuses
+    // Spawn a background task to fetch real statuses
     let state_clone = Arc::clone(&shared_state);
     let paymaster_wallets_clone = Arc::clone(&paymaster_wallets);
     tokio::spawn(
@@ -150,7 +151,7 @@ async fn main() {
     // Usage monitoring
     let usage_monitoring_config = UsageMonitoringConfig::new();
     let usage_stats = UsageStats::default(&usage_monitoring_config);
-    // 🔹 Shared state for usage stats
+    // Shared state for usage stats
     let shared_usage_stats = Arc::new(Mutex::new(usage_stats));
     tokio::spawn(
     {
@@ -162,8 +163,8 @@ async fn main() {
 
     // bridge monitoring
     let bridge_monitoring_config = BridgeMonitoringConfig::new();
-    // 🔹 Shared state for bridge status
-    let bridge_state = Arc::new(Mutex::new(BridgeStatus::default()));
+    // Shared state for bridge status
+    let bridge_state = SharedBridgeState::default();
     tokio::spawn(
     {
         let bridge_state_clone = Arc::clone(&bridge_state);
@@ -181,7 +182,7 @@ async fn main() {
         .layer(cors);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
-    info!("🚀 Server running at http://{}", addr);
+    info!(%addr, "Server running at http://");
 
     let listener = TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();

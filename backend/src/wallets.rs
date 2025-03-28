@@ -1,14 +1,15 @@
-use crate::config::Config;
+use axum::Json;
 use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::core::client::ClientT;
 use serde_json::json;
-use tokio::sync::{Mutex};
-use std::sync::Arc;
-use tokio::time::{interval, Duration};
 use serde::Serialize;
-use log::info;
+use std::sync::Arc;
+use tokio::{sync::Mutex, time::{interval, Duration}};
+use tracing::info;
+
+use crate::config::Config;
 use crate::utils::create_rpc_client;
-use axum::Json;
+
 
 pub type SharedWallets = Arc<Mutex<PaymasterWallets>>;
 #[derive(Clone, Debug, Serialize)]
@@ -23,14 +24,6 @@ impl Wallet {
     pub fn new(address: String, balance: String) -> Self {
         Self { address, balance }
     }
-
-    // pub fn address(&self) -> String {
-    //     self.address.clone()
-    // }
-
-    // pub fn balance(&self) -> String {
-    //     self.balance.clone()
-    // }
 
     pub fn update_balance(&mut self, balance: String) {
         self.balance = balance;
@@ -48,14 +41,6 @@ impl PaymasterWallets {
     pub fn new(deposit: Wallet, validating: Wallet) -> Self {
         Self { deposit, validating }
     }
-
-    // pub fn deposit(&mut self) -> &mut Wallet {
-    //     &mut self.deposit
-    // }
-
-    // pub fn validating(&mut self) -> &mut Wallet {
-    //     &mut self.validating
-    // }
 }
 
 /// Periodically fetches wallet balances
@@ -76,8 +61,6 @@ pub async fn fetch_balances_task(wallets: SharedWallets, config: &Config) {
         let validating_wallet = &mut locked_wallets.validating;
         let balance_val = fetch_wallet_balance(&rpc_client, &validating_wallet.address).await;
         validating_wallet.update_balance(balance_val.clone().unwrap_or_else(|| "0".to_string()));
-
-        // info!("✅ Updated Balances: {:?}, {:?}", balance_dep.unwrap(), balance_val.unwrap());
     }
 }
 
@@ -99,7 +82,7 @@ pub async fn fetch_wallet_balance(client: &HttpClient, wallet_address: &str) -> 
             }
         }
         Err(e) => {
-            info!("🔹 Error fetching balance: {}", e);
+            info!(%e, "Error fetching balance");
         }
     }
     None

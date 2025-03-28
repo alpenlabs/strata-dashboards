@@ -1,13 +1,20 @@
 mod rpc_server;
 
 use strata_bridge_rpc::StrataBridgeMonitoringApiServer;
-use crate::rpc_server::StrataRpcServer;
-use rpc_server::{MockBridgeMonitoring, MockStrataRpc, start_rpc_server};
+use tracing_subscriber;
+
+use crate::rpc_server::{
+    MockBridgeMonitoring, 
+    MockStrataRpc,
+    StrataRpcServer,
+    start_rpc_server
+};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // ✅ Initialize logger with info level
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    tracing_subscriber::fmt::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
 
     let strata_rpc = MockStrataRpc::load_from_files("mock_data/strata_rpc")?;
     let bridge_rpc = MockBridgeMonitoring::load_from_files("mock_data/bridge_rpc")?;

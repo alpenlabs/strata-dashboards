@@ -1,13 +1,5 @@
-use serde::{Deserialize, Serialize};
-use dotenvy::dotenv;
-use std::{
-    fs,
-    env,
-    sync::Arc,
-    collections::HashMap,
-    collections::HashSet
-};
-
+use anyhow::{Result, anyhow};
+use axum::Json;
 use chrono::{
     Utc,
     DateTime,
@@ -15,13 +7,14 @@ use chrono::{
     Duration,
     Datelike
 };
-
-use axum::Json;
-use serde_json::Value;
+use dotenvy::dotenv;
+use serde::{Deserialize, Serialize};
 use serde::de::{self, Deserializer};
+use serde_json::Value;
+use std::{fs, env, sync::Arc, collections::{HashMap, HashSet}};
 use tokio::{sync::Mutex, time::interval};
-use anyhow::{Result, anyhow};
-use log::{info, error};
+use tracing::{error, info};
+
 
 /// Enum for usage statistics
 #[derive(Debug, Eq, PartialEq, Hash, Deserialize)]
@@ -209,7 +202,6 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
 
         match result {
             Ok(user_ops) => {
-                info!("🔹 user ops count {}", user_ops.len());
                 let time_windows: Vec<(String, Duration)> = config.usage_stats_keys.time_windows
                     .iter()
                     .map(|(tw, tw_value)| {
@@ -267,14 +259,13 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
             }
             Err(e) =>
             {
-                error!("Fetch user ops failed with: {}", e);
+                error!(error = %e, "Fetch user ops failed");
             }
         }
 
         let result = fetch_accounts(&http_client, &config.accounts_query_url, start_time, now).await;
         match result {
             Ok(accounts) => {
-                info!("🔹 accounts count {}", accounts.len());
                 // Sort accounts by creation_timestamp (most recent first)
                 let mut sorted_accounts: Vec<Account> = accounts
                     .iter()
@@ -300,7 +291,7 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
             } 
             Err(e) =>
             {
-                error!("Fetch accounts failed with: {}", e);
+                error!(error = %e, "Fetch accounts failed");
             }
         }
 
@@ -385,7 +376,7 @@ async fn fetch_usage_common(http_client: &reqwest::Client, query_url: &str, star
 
 async fn fetch_user_ops(http_client: &reqwest::Client, query_url: &String,
     start_time: DateTime<Utc>, end_time: DateTime<Utc>) -> Result<Vec<UserOp>, anyhow::Error> {
-    info!("🔹 Fetching user operations");
+    info!("Fetching user operations");
 
     // Make API call with parameters
     match fetch_usage_common(http_client, query_url, start_time, end_time).await {
@@ -406,7 +397,7 @@ async fn fetch_user_ops(http_client: &reqwest::Client, query_url: &String,
 
 async fn fetch_accounts(http_client: &reqwest::Client, query_url: &String,
     start_time: DateTime<Utc>, end_time: DateTime<Utc>) -> Result<Vec<Account>, anyhow::Error> {
-    info!("🔹 Fetching accounts");
+    info!("Fetching accounts");
 
     // Make API call with parameters
     match fetch_usage_common(http_client, query_url, start_time, end_time).await {

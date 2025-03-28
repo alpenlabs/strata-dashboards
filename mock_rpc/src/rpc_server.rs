@@ -2,7 +2,6 @@ use anyhow::Context;
 use async_trait::async_trait;
 use bitcoin::{OutPoint, Txid, PublicKey};
 use jsonrpsee::{RpcModule, types::ErrorObjectOwned, proc_macros::rpc};
-use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs};
 use strata_bridge_rpc::StrataBridgeMonitoringApiServer;
@@ -15,6 +14,7 @@ use strata_bridge_rpc::types::{
 use strata_bridge_primitives::duties::BridgeDuty;
 use strata_bridge_primitives::types::PublickeyTable;
 use tokio::sync::oneshot;
+use tracing::{info, warn};
 
 /// JSON-RPC result.
 pub type RpcResult<T> = std::result::Result<T, jsonrpsee_types::ErrorObjectOwned>;
@@ -98,15 +98,13 @@ pub struct MockBridgeMonitoring {
 impl MockBridgeMonitoring {
     pub fn load_from_files(path: &str) -> Result<Self, ErrorObjectOwned> {
         fn read_json(path: &str, name: &str) -> Result<String, ErrorObjectOwned> {
-            info!("reading: {}, {}", path, name);
             fs::read_to_string(format!("{}/{}.json", path, name))
                 .map_err(|e| ErrorObjectOwned::owned(-32000, "file read error", Some(e.to_string())))
         }
 
         fn parse_json<T: serde::de::DeserializeOwned + std::fmt::Debug>(data: &str) -> Result<T, ErrorObjectOwned> {
-            let result = serde_json::from_str(data);
-            info!("result {:?}", result);
-            result.map_err(|e| ErrorObjectOwned::owned(-32000, "deserialization error", Some(e.to_string())))
+            serde_json::from_str(data)
+                .map_err(|e| ErrorObjectOwned::owned(-32000, "deserialization error", Some(e.to_string())))
         }
 
         let deposit_infos = parse_json(&read_json(path, "deposit_infos")?)?;
@@ -203,17 +201,15 @@ pub(crate) async fn start_rpc_server<C: Send + Sync + 'static>(
     rpc_module: RpcModule<C>,
     rpc_addr: &str,
 ) -> anyhow::Result<()> {
-    info!("Starting RPC server at: {rpc_addr}");
-
     let server = jsonrpsee::server::ServerBuilder::default()
         .build(rpc_addr)
         .await
         .context("failed to build RPC server")?;
 
     let handle = server.start(rpc_module);
-    let (_stop_tx, stop_rx) = oneshot::channel::<bool>();
+    info!(%rpc_addr, "RPC server started");
 
-    info!("RPC server started at: {rpc_addr}");
+    let (_stop_tx, stop_rx) = oneshot::channel::<bool>();
 
     let _ = stop_rx.await;
     info!("stopping RPC server");
