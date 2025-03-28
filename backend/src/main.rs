@@ -121,7 +121,7 @@ async fn main() {
     let cors = CorsLayer::new().allow_origin(Any);
 
     // Shared state for network status
-    let shared_state = Arc::new(Mutex::new(NetworkStatus {
+    let shared_state = Arc::new(RwLock::new(NetworkStatus {
         batch_producer: Status::Offline, // Default state
         rpc_endpoint: Status::Offline,
         bundler_endpoint: Status::Offline,
@@ -152,7 +152,7 @@ async fn main() {
     let usage_monitoring_config = UsageMonitoringConfig::new();
     let usage_stats = UsageStats::default(&usage_monitoring_config);
     // Shared state for usage stats
-    let shared_usage_stats = Arc::new(Mutex::new(usage_stats));
+    let shared_usage_stats = Arc::new(RwLock::new(usage_stats));
     tokio::spawn(
     {
         let usage_stats_clone = Arc::clone(&shared_usage_stats);
