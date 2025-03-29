@@ -1,7 +1,8 @@
 use clap::Parser;
 use dotenvy::dotenv;
-use log::info;
 use std::env;
+use tracing::info;
+
 /// CLI Args Structc
 #[derive(Parser, Debug, Clone)]
 #[command(version, about = "Strata Network Monitor")]
@@ -60,10 +61,7 @@ impl Config {
             .or_else(|| env::var("VALIDATING_PAYMASTER_WALLET").ok()) // Load from CLI, then `.env`
             .unwrap_or_else(|| "0xC0FFEE".to_string());
 
-        info!(
-            "🔹 Loaded Config: rpc_url = {}, bundler_url = {}",
-            rpc_url, bundler_url
-        );
+        info!(%rpc_url, bundler_url, "Loaded Config");
 
         Config {
             rpc_url: Some(rpc_url),

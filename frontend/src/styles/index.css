@@ -21,7 +21,6 @@
     --strata-marengo-light: #778B91;
     --strata-marengo-med: #526971;
     --strata-marengo-sharp: #273F46;
-
 }
 
 
@@ -119,12 +118,15 @@ button:focus-visible {
 /* Content */
 .dashboard {
     display: flex;
-    height: 100vh;
     width: 100%;
+    min-height: 100vh; /* Ensures full height */
+    align-items: stretch;
 }
 
 .sidebar {
     width: 15%;
+    min-height: 100vh; /* Ensures full viewport height */
+    height: auto;
     /* Fixed sidebar width */
     background-color: var(--strata-terracotta-med);
     color: var(--strata-terracotta-light);
@@ -222,7 +224,6 @@ button:focus-visible {
     border-bottom: 1px solid grey;
 }
 
-
 .balance-card {
     display: flex;
     flex-direction: column;
@@ -242,7 +243,6 @@ button:focus-visible {
     margin-bottom: 5px;
     /* Add spacing between title and balance */
 }
-
 
 .unit {
     font-weight: bold;
@@ -309,16 +309,16 @@ button:focus-visible {
     padding: 8px 0;
     border-bottom: 1px solid #ddd;
 }
-  
+
 .account-address {
     font-weight: bold;
 }
-  
+
 .account-detail {
     font-size: 14px;
     color: gray;
 }
-    
+
 .no-accounts {
     font-style: italic;
     color: gray;
@@ -343,6 +343,80 @@ button:focus-visible {
     color: var(--strata-sand-med);
 }
 
+.bridge-container {
+    margin-left: 30px; /* Adds left margin */
+    margin-top: 20px;  /* Adds top margin */
+}
+
+/* Bridge Status */
+.bridge-title {
+    /* font-weight: bold; */
+    margin-bottom: 50px;
+    color: var(--strata-terracotta-med);
+}
+
+.bridge-section {
+    margin-bottom: 50px;
+    text-align: left;
+    width: 600px; /* Prevents the table from spreading too wide */
+}
+
+.table-wrapper {
+    display: flex;
+    justify-content: flex-start; /* Aligns the table to the left */
+}
+
+.operators-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+.operators-row:not(:last-child) {
+    border-bottom: 1px solid black; /* Horizontal separator between rows */
+}
+
+.operators-row td {
+    text-align: center;
+    margin-left: 10px;
+    padding: 10px 10px;
+}
+
+.operators-row td:first-child {
+    font-weight: bold; /* Only the first column (ID) is bold */
+}
+
+.transactions-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+.transactions-header th {
+    font-weight: bold;
+    padding: 10px 5px;
+    text-align: center;
+    border-bottom: 1px solid black; /* Separator for headers */
+}
+
+.transactions-row {
+    border-bottom: 1px solid black; /* Horizontal separator between rows */
+}
+
+.transactions-row td {
+    text-align: center;
+    padding: 10px 10px;
+    margin-left: 10px;
+}
+
+.table-cell {
+    text-align: center;
+}
+
+.no-items {
+    font-style: italic;
+    color: gray;
+}
 
 .loading-text,
 .error-text {

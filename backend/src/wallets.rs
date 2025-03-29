@@ -1,16 +1,17 @@
-use crate::config::Config;
+use axum::Json;
 use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::core::client::ClientT;
 use serde_json::json;
-use tokio::sync::{Mutex};
-use std::sync::Arc;
-use tokio::time::{interval, Duration};
 use serde::Serialize;
-use log::info;
-use crate::utils::create_rpc_client;
-use axum::Json;
+use std::sync::Arc;
+use tokio::{sync::RwLock, time::{interval, Duration}};
+use tracing::info;
 
-pub type SharedWallets = Arc<Mutex<PaymasterWallets>>;
+use crate::config::Config;
+use crate::utils::create_rpc_client;
+
+
+pub type SharedWallets = Arc<RwLock<PaymasterWallets>>;
 #[derive(Clone, Debug, Serialize)]
 pub struct Wallet {
     /// Wallet address
@@ -23,14 +24,6 @@ impl Wallet {
     pub fn new(address: String, balance: String) -> Self {
         Self { address, balance }
     }
-
-    // pub fn address(&self) -> String {
-    //     self.address.clone()
-    // }
-
-    // pub fn balance(&self) -> String {
-    //     self.balance.clone()
-    // }
 
     pub fn update_balance(&mut self, balance: String) {
         self.balance = balance;
@@ -48,14 +41,6 @@ impl PaymasterWallets {
     pub fn new(deposit: Wallet, validating: Wallet) -> Self {
         Self { deposit, validating }
     }
-
-    // pub fn deposit(&mut self) -> &mut Wallet {
-    //     &mut self.deposit
-    // }
-
-    // pub fn validating(&mut self) -> &mut Wallet {
-    //     &mut self.validating
-    // }
 }
 
 /// Periodically fetches wallet balances
@@ -67,7 +52,7 @@ pub async fn fetch_balances_task(wallets: SharedWallets, config: &Config) {
     loop {
         interval.tick().await;
 
-        let mut locked_wallets = wallets.lock().await;
+        let mut locked_wallets = wallets.write().await;
 
         let deposit_wallet = &mut locked_wallets.deposit;
         let balance_dep = fetch_wallet_balance(&rpc_client, &deposit_wallet.address).await;
@@ -76,14 +61,12 @@ pub async fn fetch_balances_task(wallets: SharedWallets, config: &Config) {
         let validating_wallet = &mut locked_wallets.validating;
         let balance_val = fetch_wallet_balance(&rpc_client, &validating_wallet.address).await;
         validating_wallet.update_balance(balance_val.clone().unwrap_or_else(|| "0".to_string()));
-
-        // info!("✅ Updated Balances: {:?}, {:?}", balance_dep.unwrap(), balance_val.unwrap());
     }
 }
 
 /// Fetches the ETH balance of a given wallet address in Wei (integer)
 pub async fn fetch_wallet_balance(client: &HttpClient, wallet_address: &str) -> Option<String> {
-    info!("🔹 Fetching balance for wallet: {}", wallet_address);
+    info!(%wallet_address, "Fetching balance for wallet");
 
     let params = (wallet_address, "latest");  // ✅ Use a tuple instead of `serde_json::Value`
     let response: Result<serde_json::Value, _> = client.request("eth_getBalance", params).await;
@@ -99,7 +82,7 @@ pub async fn fetch_wallet_balance(client: &HttpClient, wallet_address: &str) -> 
             }
         }
         Err(e) => {
-            info!("🔹 Error fetching balance: {}", e);
+            info!(%e, "Error fetching balance");
         }
     }
     None
@@ -107,12 +90,12 @@ pub async fn fetch_wallet_balance(client: &HttpClient, wallet_address: &str) -> 
 
 /// Handler to fetch ETH wallet balances
 pub async fn get_wallets_with_balances(wallets: SharedWallets) -> Json<serde_json::Value> {
-    let locked_wallets = wallets.lock().await;
+    let locked_wallets = wallets.read().await;
     Json(json!({ "wallets": *locked_wallets }))
 }
 
 pub fn init_paymaster_wallets(config: &Config) -> SharedWallets {
     let deposit = Wallet::new(config.deposit_wallet(), "0".to_string());
     let validating = Wallet::new(config.validating_wallet(), "0".to_string());
-    Arc::new(Mutex::new(PaymasterWallets::new(deposit, validating))) // ✅ Returns tokio::sync::Mutex
+    Arc::new(RwLock::new(PaymasterWallets::new(deposit, validating))) // ✅ Returns tokio::sync::Mutex
 }

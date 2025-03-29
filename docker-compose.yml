@@ -1,16 +1,27 @@
 services:
+  mock_rpc:
+    build:
+      context: .
+      dockerfile: mock_rpc.Dockerfile
+    container_name: strata_dashboards_mock_rpc
+    ports:
+      - "8545:8545"
+      - "8546:8546"
   backend:
     build:
       context: .
       dockerfile: backend.Dockerfile
     container_name: strata_dashboards_backend
+    depends_on:
+      - mock_rpc
     environment:
-      RPC_URL: https://strataclient1ff4bc1df.devnet-annapurna.stratabtc.org
-      BUNDLER_URL: https://bundler.devnet-annapurna.stratabtc.org/health
+      STRATA_RPC_URL: http://mock_rpc:8545
+      STRATA_BRIDGE_RPC_URL: http://mock_rpc:8546
+      BUNDLER_URL: https://bundler.testnet.alpenlabs.io/health
       # TODO: Update the following two urls after strata blockscout service includes
       #       updated user-ops-indexer supporting timestamp-based filtering
-      USER_OPS_QUERY_URL: http://localhost/api/v2/proxy/account-abstraction/operations
-      ACCOUNTS_QUERY_URL: http://localhost/api/v2/proxy/account-abstraction/accounts
+      USER_OPS_QUERY_URL: https://explorer.testnet.alpenlabs.io/api/v2/proxy/account-abstraction/operations
+      ACCOUNTS_QUERY_URL: https://explorer.testnet.alpenlabs.io/api/v2/proxy/account-abstraction/accounts
       USAGE_STATS_REFETCH_INTERVAL_S: 120
     ports:
       - "3000:3000"
