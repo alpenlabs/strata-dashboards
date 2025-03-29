@@ -17,7 +17,7 @@ services:
     environment:
       STRATA_RPC_URL: http://mock_rpc:8545
       STRATA_BRIDGE_RPC_URL: http://mock_rpc:8546
-      BUNDLER_URL: https://bundler.devnet-annapurna.stratabtc.org/health
+      BUNDLER_URL: https://bundler.testnet.alpenlabs.io/health
       # TODO: Update the following two urls after strata blockscout service includes
       #       updated user-ops-indexer supporting timestamp-based filtering
       USER_OPS_QUERY_URL: https://explorer.testnet.alpenlabs.io/api/v2/proxy/account-abstraction/operations
