@@ -82,7 +82,7 @@ checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 [[package]]
 name = "alpen-bridge-params"
 version = "0.1.0"
-source = "git+https://github.com/alpenlabs/strata-bridge.git#6ff1d08f16d631424271c3e8e3cc3ec19280448a"
+source = "git+https://github.com/alpenlabs/strata-bridge.git#c1a922674ae6817763ff517079314dc3c488e2b4"
 dependencies = [
  "bitcoin",
  "serde",
@@ -3680,9 +3680,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.21.2"
+version = "1.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2806eaa3524762875e21c3dcd057bc4b7bfa01ce4da8d46be1cd43649e1cc6b"
+checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
 
 [[package]]
 name = "opaque-debug"
@@ -4970,7 +4970,7 @@ checksum = "4af28eeb7c18ac2dbdb255d40bee63f203120e1db6b0024b177746ebec7049c1"
 [[package]]
 name = "strata-bridge-primitives"
 version = "0.1.0"
-source = "git+https://github.com/alpenlabs/strata-bridge.git#6ff1d08f16d631424271c3e8e3cc3ec19280448a"
+source = "git+https://github.com/alpenlabs/strata-bridge.git#c1a922674ae6817763ff517079314dc3c488e2b4"
 dependencies = [
  "alpen-bridge-params",
  "anyhow",
@@ -4993,7 +4993,7 @@ dependencies = [
 [[package]]
 name = "strata-bridge-rpc"
 version = "0.1.0"
-source = "git+https://github.com/alpenlabs/strata-bridge.git#6ff1d08f16d631424271c3e8e3cc3ec19280448a"
+source = "git+https://github.com/alpenlabs/strata-bridge.git#c1a922674ae6817763ff517079314dc3c488e2b4"
 dependencies = [
  "bitcoin",
  "jsonrpsee",
@@ -5015,7 +5015,7 @@ dependencies = [
 [[package]]
 name = "strata-primitives"
 version = "0.1.0"
-source = "git+https://github.com/alpenlabs/strata.git#2f0784109e39e9dd278ea51df4c87b2370dd6771"
+source = "git+https://github.com/alpenlabs/strata.git#12585064fc53eeccb00d28c3acb46f5f5faa8d21"
 dependencies = [
  "anyhow",
  "arbitrary",
