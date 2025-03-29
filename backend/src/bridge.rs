@@ -41,11 +41,11 @@ impl BridgeMonitoringConfig {
 
         let strata_rpc_url = env::var("STRATA_RPC_URL").ok()
             .unwrap_or_else(|| {
-                "http://0.0.0.0:8545".to_string()
+                "http://localhost:8545".to_string()
             });
 
         let bridge_rpc_url = env::var("STRATA_BRIDGE_RPC_URL").ok()
-            .unwrap_or_else(|| "http://0.0.0.0:8546".to_string());
+            .unwrap_or_else(|| "http://localhost:8546".to_string());
 
         let refresh_interval_s: u64 = std::env::var("BRIDGE_STATUS_REFETCH_INTERVAL_S")
             .ok()
@@ -258,7 +258,7 @@ pub async fn bridge_monitoring_task(state: SharedBridgeState, config: &BridgeMon
             }
         }
 
-        // Check if deposit_info has withdrawal request txid
+        // Withdrawal fulfillment
         let mut withdrawal_infos: Vec<WithdrawalInfo> = match get_withdrawals(&bridge_rpc, deposits_to_withdrawals).await {
             Ok(data) => data,
             Err(e) => {
@@ -280,8 +280,8 @@ pub async fn bridge_monitoring_task(state: SharedBridgeState, config: &BridgeMon
     }
 }
 
+/// Fetch operator idx and public keys
 async fn get_bridge_operators(rpc_client: &HttpClient) -> Result<PublickeyTable, ClientError> {
-    // Fetch active operator public keys
     let operator_table: PublickeyTable = match rpc_client.request("stratabridge_bridgeOperators", ((),)).await {
         Ok(data) => data,
         Err(e) => {
@@ -293,6 +293,7 @@ async fn get_bridge_operators(rpc_client: &HttpClient) -> Result<PublickeyTable,
     Ok(operator_table)
 }
 
+/// Fetch operator status
 async fn get_operator_status(bridge_client: &HttpClient, operator_idx: u32) -> Result<String, ClientError> {
     let status: RpcOperatorStatus = match bridge_client.request("stratabridge_operatorStatus", (operator_idx,)).await {
         Ok(data) => data,
@@ -305,6 +306,7 @@ async fn get_operator_status(bridge_client: &HttpClient, operator_idx: u32) -> R
     Ok(format!("{:?}", status))
 }
 
+/// Fetch current deposits
 async fn get_current_deposits(strata_client: &HttpClient) -> Result<Vec<u32>, ClientError> {
     let deposit_ids: Vec<u32> = match strata_client.request("strata_getCurrentDeposits", ((),)).await {
         Ok(data) => data,
@@ -317,6 +319,10 @@ async fn get_current_deposits(strata_client: &HttpClient) -> Result<Vec<u32>, Cl
     Ok(deposit_ids)
 }
 
+/// Fetch deposit info
+/// 
+/// First get deposit entry, which may have withdrawal request txid.
+/// Return DepositInfo and DepositToWithdrawal (needed to fetch withdrawals)
 async fn get_deposit_info(strata_rpc: &HttpClient, bridge_rpc: &HttpClient, deposit_id: u32) -> Result<(Option<DepositInfo>, Option<DepositToWithdrawal>), ClientError> {
 
     let response: Value = match strata_rpc
@@ -365,6 +371,7 @@ async fn get_deposit_info(strata_rpc: &HttpClient, bridge_rpc: &HttpClient, depo
     Ok((Some(DepositInfo::from(deposit_info)), Some(deposit_to_withdrawal)))
 }
 
+/// Fetch withdrawal infos
 async fn get_withdrawals(bridge_rpc: &HttpClient, deposit_to_withdrawals: Vec<DepositToWithdrawal>) -> Result<Vec<WithdrawalInfo>, ClientError> {
     let mut withdrawal_infos = Vec::new();
     for deposit_to_wd in deposit_to_withdrawals.iter() {
@@ -388,6 +395,7 @@ async fn get_withdrawals(bridge_rpc: &HttpClient, deposit_to_withdrawals: Vec<De
     Ok(withdrawal_infos)
 }
 
+/// Fetch claim/reimbursement infos
 async fn get_reimbursements(bridge_rpc: &HttpClient) -> Result<Vec<ReimbursementInfo>, ClientError> {
     let claim_txids: Vec<String> = match bridge_rpc.request("stratabridge_claims", ((),)).await {
         Ok(data) => data,
@@ -413,6 +421,7 @@ async fn get_reimbursements(bridge_rpc: &HttpClient) -> Result<Vec<Reimbursement
     Ok(reimbursement_infos)
 }
 
+/// Return latest bridge status
 pub async fn get_bridge_status(state: SharedBridgeState) -> Json<BridgeStatus> {
     let data = state.read().await.clone();
     Json(data)
