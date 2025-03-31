@@ -1,13 +1,5 @@
-use serde::{Deserialize, Serialize};
-use dotenvy::dotenv;
-use std::{
-    fs,
-    env,
-    sync::Arc,
-    collections::HashMap,
-    collections::HashSet
-};
-
+use anyhow::{Result, Context};
+use axum::Json;
 use chrono::{
     Utc,
     DateTime,
@@ -15,13 +7,13 @@ use chrono::{
     Duration,
     Datelike
 };
-
-use axum::Json;
-use serde_json::Value;
+use dotenvy::dotenv;
+use serde::{Deserialize, Serialize};
 use serde::de::{self, Deserializer};
-use tokio::{sync::Mutex, time::interval};
-use anyhow::{Result, Context};
-use log::{info, error};
+use serde_json::Value;
+use std::{fs, env, sync::Arc, collections::{HashMap, HashSet}};
+use tokio::{sync::RwLock, time::interval};
+use tracing::{error, info};
 
 /// Enum for usage statistics
 #[derive(Debug, Eq, PartialEq, Hash, Deserialize)]
@@ -158,13 +150,13 @@ struct AccountsResponse {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UsageStats {
-    // Usage stats
-    // First level key is the name of stat. See USAGE_STATS in `usage_keys.json`.
-    // Second level key is time period. See TIME_WINDOWS in `usage_keys.json`.
+    /// Usage stats:
+    /// First level key is the name of stat. See USAGE_STATS in `usage_keys.json`.
+    /// Second level key is time period. See TIME_WINDOWS in `usage_keys.json`.
     stats: HashMap<String, HashMap<String, u64>>,
 
-    // Selected accounts: e.g. recently deployed, top gas consumers
-    // First level key is the name of stat. See SELECTED_ACCOUNTS in `usage_keys.json`.
+    /// Selected accounts: e.g. recently deployed, top gas consumers
+    /// First level key is the name of stat. See SELECTED_ACCOUNTS in `usage_keys.json`.
     selected_accounts: HashMap<String, Vec<Account>>,
 }
 
@@ -191,8 +183,8 @@ impl UsageStats {
     }
 }
 
-// Shared usage stats
-pub type SharedUsageStats = Arc<Mutex<UsageStats>>;
+/// Shared usage stats
+pub type SharedUsageStats = Arc<RwLock<UsageStats>>;
 
 type UniqueAccounts = HashMap<String, HashSet<String>>;
 type AccountsGasUsage = HashMap<String, u64>;
@@ -205,7 +197,7 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
         interval.tick().await;
         let http_client = reqwest::Client::new();
 
-        info!("🔹 Refresing usage stats...");
+        info!("Refresing usage stats...");
         let now = Utc::now();
 
         // Determine the start_time for stats
@@ -215,7 +207,7 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
             start_time = time_30d_earlier;
         }
 
-        let mut locked_stats = shared_stats.lock().await;
+        let mut locked_stats = shared_stats.write().await;
         // Aggregate gas used per sender (in the last 24 hours)
         let mut gas_usage: AccountsGasUsage = HashMap::new();
 
@@ -248,7 +240,6 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
 
             match result {
                 Ok(response) => {
-                    info!("🔹 user ops count {}", response.user_ops.len());
                     // compute stats for each TIME_WINDOW
                     for entry in response.user_ops {
                         if let Ok(op_time) = DateTime::parse_from_rfc3339(&entry.timestamp).map(|dt| dt.with_timezone(&Utc)) {
@@ -280,7 +271,7 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
                 }
                 Err(e) =>
                 {
-                    error!("Fetch user ops failed with: {}", e);
+                    error!(error = %e, "Fetch user ops failed");
                     break;
                 }
             }
@@ -304,7 +295,6 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
                 Some(config.query_page_size), page_token).await;
             match result {
                 Ok(response) => {
-                    info!("🔹 accounts count {}", response.accounts.len());
                     // Sort accounts by creation_timestamp (most recent first)
                     let mut sorted_accounts: Vec<Account> = response.accounts
                         .iter()
@@ -333,7 +323,7 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
                 }
                 Err(e) =>
                 {
-                    error!("Fetch accounts failed with: {}", e);
+                    error!(error = %e, "Fetch accounts failed");
                     break;
                 }
             }
@@ -401,7 +391,7 @@ async fn fetch_usage_common(http_client: &reqwest::Client, query_url: &str,
         time.format("%Y-%m-%d %H:%M:%S").to_string()
     };
 
-    // ✅ Construct query parameters, only adding Some(_) values
+    // Construct query parameters, only adding Some(_) values
     let mut query_params: HashMap<&str, String> = HashMap::new();
     query_params.insert("start_time", format_time(start_time));
     query_params.insert("end_time", format_time(end_time));
@@ -414,7 +404,7 @@ async fn fetch_usage_common(http_client: &reqwest::Client, query_url: &str,
         query_params.insert("page_token", token);
     }
 
-    // ✅ Send request with query parameters (browser-like format)
+    // Send request with query parameters (browser-like format)
     let response = http_client
         .get(query_url)
         .query(&query_params) // Use query parameters instead of JSON body
@@ -430,7 +420,7 @@ async fn fetch_usage_common(http_client: &reqwest::Client, query_url: &str,
 async fn fetch_user_ops(http_client: &reqwest::Client, query_url: &str,
     start_time: DateTime<Utc>, end_time: DateTime<Utc>,
     page_size: Option<u64>, page_token: Option<String>) -> Result<UserOpsResponse, anyhow::Error> {
-    info!("🔹 Fetching user operations");
+    info!("Fetching user operations");
 
     let data = fetch_usage_common(http_client, query_url, start_time, end_time, page_size, page_token)
         .await
@@ -457,7 +447,7 @@ async fn fetch_user_ops(http_client: &reqwest::Client, query_url: &str,
 async fn fetch_accounts(http_client: &reqwest::Client, query_url: &String,
     start_time: DateTime<Utc>, end_time: DateTime<Utc>,
     page_size: Option<u64>, page_token: Option<String>) -> Result<AccountsResponse, anyhow::Error> {
-    info!("🔹 Fetching accounts");
+    info!("Fetching accounts");
 
     let data = fetch_usage_common(http_client, query_url, start_time, end_time, page_size, page_token)
         .await
@@ -482,7 +472,7 @@ async fn fetch_accounts(http_client: &reqwest::Client, query_url: &String,
 }
 
 pub async fn get_usage_stats(state: SharedUsageStats) -> Json<UsageStats> {
-    let data = state.lock().await.clone();
+    let data = state.read().await.clone();
     Json(data)
 }
 
