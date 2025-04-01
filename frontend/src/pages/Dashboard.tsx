@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useNetworkStatus } from "../hooks/useNetworkStatus";
 import { usePaymasterWallets } from "../hooks/usePaymasterWallets";
 import convertWeiToBtc from "../utils";
+import "../styles/network.css";
 
 const StatusCard = lazy(() => import("../components/StatusCard"));
 const BalanceCard = lazy(() => import("../components/BalanceCard"));
