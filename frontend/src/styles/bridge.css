@@ -11,26 +11,23 @@
 }
 
 .bridge-section {
-  width: 100%;
   max-width: 100%;
-  overflow-x: auto;
+  overflow-x: visible;
+  padding-right: 0;
   padding-left: 24px;
 }
 
 .table-wrapper {
   overflow-x: auto;
-  width: 100%;
-  padding-right: 100px;
+  max-width: 100%;
   box-sizing: border-box;
 }
 
 .operators-table,
 .transactions-table {
-  display: inline-block;
-  width: 100%;
-  min-width: 400px;
+  min-width: 800px;
+  width: auto;
   border-collapse: collapse;
-  margin-top: 10px;
 }
 
 .operators-row td:first-child {

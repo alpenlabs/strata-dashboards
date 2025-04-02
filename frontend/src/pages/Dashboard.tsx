@@ -28,7 +28,7 @@ export default function Dashboard() {
                 <div className="menu">
                     <Link to="/" className={`menu-item ${pathname === "/" ? "active" : ""}`}>Network</Link>
                     <Link to="/bridge" className={`menu-item ${pathname === "/bridge" ? "active" : ""}`}>Bridge</Link>
-                    <Link to="/usage" className={`menu-item ${pathname === "/usage" ? "active" : ""}`}>Usage</Link>
+                    <Link to="/usage" className={`menu-item ${pathname === "/usage" ? "active" : ""}`}>Activity</Link>
                 </div>
             </div>
 
