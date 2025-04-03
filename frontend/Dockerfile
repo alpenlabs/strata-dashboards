@@ -4,7 +4,7 @@ FROM node:20
 WORKDIR /app
 
 # Copy package.json and lock file first to optimize caching
-COPY strata-dashboards/package.json package-lock.json ./
+COPY alpen-dashboards/package.json package-lock.json ./
 
 # Install dependencies
 RUN npm install

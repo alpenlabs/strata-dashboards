@@ -5,13 +5,13 @@ use tracing::info;
 
 /// CLI Args Structc
 #[derive(Parser, Debug, Clone)]
-#[command(version, about = "Strata Network Monitor")]
+#[command(version, about = "Alpen Network Monitor")]
 pub struct Config {
-    /// JSON-RPC Endpoint for Strata client
+    /// JSON-RPC Endpoint for Alpen client
     #[arg(long)]
     rpc_url: Option<String>,
 
-    /// JSON-RPC Endpoint for Strata reth for wallet balance
+    /// JSON-RPC Endpoint for Alpen evm for wallet balance
     #[arg(long)]
     reth_url: Option<String>,
 
