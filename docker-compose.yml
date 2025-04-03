@@ -11,7 +11,7 @@ services:
     build:
       context: .
       dockerfile: backend.Dockerfile
-    container_name: strata_dashboards_backend
+    container_name: alpen_dashboards_backend
     depends_on:
       - mock_rpc
     environment:
@@ -30,7 +30,7 @@ services:
     build:
       context: .
       dockerfile: frontend.Dockerfile
-    container_name: strata_dashboards_frontend
+    container_name: alpen_dashboards_frontend
     depends_on:
       - backend
     ports:

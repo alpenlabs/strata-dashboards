@@ -1,4 +1,4 @@
-# strata-dashboards
+# alpen-dashboards
 
 ## Run backend
 
