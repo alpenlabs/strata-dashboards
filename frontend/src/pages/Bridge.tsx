@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { useLocation } from "react-router-dom";
 import { useBridgeStatus, OperatorStatus, DepositInfo, WithdrawalInfo, ReimbursementInfo } from "../hooks/useBridgeStatus";
+import '../styles/bridge.css';
 
 const truncateHex = (hex: string, startLength = 4, endLength = 4) => {
     if (!hex) return "-"; // If no TXID, show "-"

@@ -1,6 +1,7 @@
 import { Suspense, useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { useUsageStats } from "../hooks/useUsageStats.ts";
+import "../styles/usage.css";
 
 interface TimePeriodTabsProps {
     timePeriods: string[];

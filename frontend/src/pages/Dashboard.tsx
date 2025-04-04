@@ -1,8 +1,9 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useNetworkStatus } from "../hooks/useNetworkStatus";
 import { usePaymasterWallets } from "../hooks/usePaymasterWallets";
 import convertWeiToBtc from "../utils";
+import "../styles/network.css";
 
 const StatusCard = lazy(() => import("../components/StatusCard"));
 const BalanceCard = lazy(() => import("../components/BalanceCard"));
@@ -10,6 +11,10 @@ const Bridge = lazy(() => import("./Bridge"));
 const Usage = lazy(() => import("./Usage"));
 
 export default function Dashboard() {
+    const [isMenuOpen, setMenuOpen] = useState(false);
+    const toggleMenu = () => {
+        setMenuOpen((prev) => !prev);
+    };
     const { pathname } = useLocation(); // Get current URL path
     const { data, isLoading, error } = useNetworkStatus();
     const { data: wallets, isLoading: bal_isLoading, error: bal_error } = usePaymasterWallets();
@@ -18,16 +23,50 @@ export default function Dashboard() {
         <div className="dashboard">
             <div className="sidebar">
                 {/* Logo Wrapper */}
-                <a href="/" className="logoWrapper">
-                    <div className="logoSvg">
+                <a href="/" className="logo-wrapper">
+                    <div className="logo-svg">
                         <img src="/Strata_full_logo_sand.png" alt="STRATA" />
                     </div>
                 </a>
-                {/* Menu */}
-                <div className="menu">
-                    <Link to="/" className={`menu-item ${pathname === "/" ? "active" : ""}`}>Network</Link>
-                    <Link to="/bridge" className={`menu-item ${pathname === "/bridge" ? "active" : ""}`}>Bridge</Link>
-                    <Link to="/usage" className={`menu-item ${pathname === "/usage" ? "active" : ""}`}>Usage</Link>
+                {/* Hamburger / Cross toggle — only shown on mobile */}
+                <div className="menu-button" onClick={toggleMenu}>
+                {isMenuOpen ? (
+                    <div className="cross">
+                    <div className="cross-bar"></div>
+                    <div className="cross-bar"></div>
+                    </div>
+                ) : (
+                    <div className="hamburger">
+                    <div className="hamburger-bar"></div>
+                    <div className="hamburger-bar"></div>
+                    <div className="hamburger-bar"></div>
+                    </div>
+                )}
+                </div>
+
+                {/* Responsive menu dropdown (mobile) */}
+                <div className={`navbar-menu-wrapper ${isMenuOpen ? "show-menu" : ""}`}>
+                <Link
+                    to="/"
+                    className={`menu-item ${pathname === "/" ? "active" : ""}`}
+                    onClick={() => setMenuOpen(false)}
+                >
+                    Network
+                </Link>
+                <Link
+                    to="/bridge"
+                    className={`menu-item ${pathname === "/bridge" ? "active" : ""}`}
+                    onClick={() => setMenuOpen(false)}
+                >
+                    Bridge
+                </Link>
+                <Link
+                    to="/usage"
+                    className={`menu-item ${pathname === "/usage" ? "active" : ""}`}
+                    onClick={() => setMenuOpen(false)}
+                >
+                    Activity
+                </Link>
                 </div>
             </div>
 
