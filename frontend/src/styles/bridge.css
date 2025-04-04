@@ -25,7 +25,7 @@
 
 .operators-table,
 .transactions-table {
-  min-width: 800px;
+  min-width: 768px;
   width: auto;
   border-collapse: collapse;
 }

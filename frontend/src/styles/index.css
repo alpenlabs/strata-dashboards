@@ -79,7 +79,7 @@ main {
 
 .sidebar {
   width: 15%;
-  min-height: 100vh;
+  min-height: 120vh;
   background-color: var(--strata-terracotta-med);
   color: var(--strata-sand-light);
   padding: 20px;
@@ -87,11 +87,41 @@ main {
   flex-direction: column;
   align-items: center;
   margin: 0;
+  position: relative;
+}
+
+.hamburger {
+  display: none;
+  font-size: 36px;
+  color: var(--strata-sand-light);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  margin: 0 20px;
+}
+
+.cross {
+  display: none;
+  font-size: 36px;
+  background: var(--strata-terracotta-med);
+  color: white;
+  cursor: pointer;
+  margin: 0 20px;
+  padding: 0;
 }
 
 .content {
   flex-grow: 1;
   padding: 40px;
+}
+
+.navbar-menu-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding-top: 40px;
 }
 
 .menu {
@@ -104,7 +134,6 @@ main {
 .menu-item {
   color: var(--strata-sand-light);
   margin: 0.5rem 0;
-  padding-top: 5px;
   padding-bottom: 5px;
 }
 
@@ -114,19 +143,25 @@ main {
   padding-bottom: 5px;
 }
 
-.logoWrapper {
+.menu-button {
+  display: none;
+  cursor: pointer;
+  margin-right: 16px;
+}
+
+.logo-wrapper {
   max-width: 80%;
 }
 
-.logoSvg {
+.logo-svg {
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.logoSvg img {
+.logo-svg img {
   max-width: 80%;
-  min-width: 100px;
+  min-width: 80px;
   height: auto;
 }
 
@@ -145,5 +180,92 @@ main {
 
   button {
     background-color: var(--strata-terracotta-med);
+  }
+}
+
+@media screen and (max-width: 768px) {
+  html, body, #root, .content {
+    overflow-x: hidden;
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  .dashboard {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    min-height: auto;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+  }
+
+  .logo-wrapper {
+    max-width: 40%;
+  }
+
+  .menu-button {
+    display: flex;
+    color: white;
+    margin-right: 16px; /* ✅ spacing to right */
+  }
+  
+  .hamburger {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  
+  .hamburger-bar {
+    width: 25px;
+    height: 3px;
+    background-color: var(--strata-sand-light);
+    border-radius: 2px;
+  }
+
+  .cross {
+    position: relative;
+    width: 25px;
+    height: 25px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .cross-bar {
+    position: absolute;
+    width: 25px;
+    height: 3px;
+    background-color: var(--strata-sand-light);
+    border-radius: 2px;
+  }
+
+  .cross-bar:first-child {
+    transform: rotate(45deg);
+  }
+
+  .cross-bar:last-child {
+    transform: rotate(-45deg);
+  }
+
+  .navbar-menu-wrapper {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    position: absolute;
+    top: 74px;
+    left: 0;
+    width: 100%;
+    background-color: var(--strata-terracotta-med);
+    z-index: 10;
+    padding: 20px 0;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  }
+
+  .navbar-menu-wrapper.show-menu {
+    display: flex;
   }
 }
