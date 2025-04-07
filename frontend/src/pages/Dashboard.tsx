@@ -25,7 +25,7 @@ export default function Dashboard() {
                 {/* Logo Wrapper */}
                 <a href="/" className="logo-wrapper">
                     <div className="logo-svg">
-                        <img src="/Strata_full_logo_sand.png" alt="STRATA" />
+                        <img src="/alpen-logo.svg" alt="ALPEN" />
                     </div>
                 </a>
                 {/* Hamburger / Cross toggle — only shown on mobile */}
@@ -73,17 +73,17 @@ export default function Dashboard() {
             <div className="content">
                 {/* Network Monitor Page */}
                 {pathname === "/" && (
-                    <div className="status-container">
+                    <div>
                         {error && <p className="error-text">Error loading data</p>}
 
                         <Suspense fallback={<p className="loading-text">Loading...</p>}>
                             {isLoading ? (
                                 <p className="loading-text">Loading...</p>
                             ) : (
-                                <div className="status-list">
-                                    <StatusCard title="Batch producer status" status={data?.batch_producer ?? "Unknown"} />
-                                    <StatusCard title="RPC endpoint status" status={data?.rpc_endpoint ?? "Unknown"} />
-                                    <StatusCard title="Bundler endpoint status" status={data?.bundler_endpoint ?? "Unknown"} />
+                                <div className="status-cards">
+                                    <StatusCard title="Batch producer status" status={data?.batch_producer.toUpperCase() ?? "Unknown"} />
+                                    <StatusCard title="RPC endpoint status" status={data?.rpc_endpoint.toUpperCase() ?? "Unknown"} />
+                                    <StatusCard title="Bundler endpoint status" status={data?.bundler_endpoint.toUpperCase() ?? "Unknown"} />
                                 </div>
                             )}
                         </Suspense>
@@ -92,18 +92,17 @@ export default function Dashboard() {
 
                 {/* Paymaster Wallets Section */}
                 {pathname === "/" && (
-                    <div className="paymaster-container">
+                    <div>
                         {bal_error && <p className="error-text">Error loading Paymaster Wallets</p>}
-
                         <Suspense fallback={<p className="loading-text">Loading paymaster balances...</p>}>
                             {bal_isLoading ? (
                                 <p className="loading-text">Loading paymaster wallets...</p>
                             ) : wallets && wallets.deposit && wallets.validating ? (
-                                <div className="paymaster-list">
-                                    <div className="paymaster-item">
+                                <div className="balance-cards">
+                                    <div className="balance-section">
                                         <BalanceCard title="Deposit paymaster wallet" balance={convertWeiToBtc(wallets.deposit.balance)} />
                                     </div>
-                                    <div className="paymaster-item">
+                                    <div className="balance-section">
                                         <BalanceCard title="Validating paymaster wallet" balance={convertWeiToBtc(wallets.validating.balance)} />
                                     </div>
                                 </div>

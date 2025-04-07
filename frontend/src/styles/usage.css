@@ -18,13 +18,13 @@
 
 .usage-title {
   margin: 0 1rem;
-  color: var(--strata-terracotta-med);
+  color: black;
 }
 
 .usage-tab {
   cursor: pointer;
   padding: 10px 10px;
-  color: var(--strata-terracotta-med);
+  color: black;
   background-color: transparent;
 }
 
@@ -38,6 +38,7 @@
   border: 1px solid black;
   border-radius: 10px;
   font-weight: bold;
+  color: black;
 }
 
 .accounts-section {
@@ -57,10 +58,6 @@
   flex-direction: column;
   padding: 8px 0;
   border-bottom: 1px solid #ddd;
-}
-
-.account-address {
-  font-weight: bold;
 }
 
 .account-detail {
@@ -83,6 +80,6 @@
     flex: 1 1 100%;
     width: 100%;
     box-sizing: border-box;
-    margin-bottom: 16px;
+    padding: 20px 10px;    
   }
 }

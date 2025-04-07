@@ -79,10 +79,10 @@ export default function Usage() {
     }, [statsNames, timeWindows]); // ✅ Runs only when these values change      
 
     return (
-        <div className="usage-content">
+        <div >
             {/* Usage Monitor Page */}
             {pathname === "/usage" && (
-            <div className="usage-container">
+            <div>
                 {! data || error && <p className="error-text">Error loading data</p>}
                 <Suspense fallback={<p className="loading-text">Loading...</p>}>
                     {isLoading ? (
@@ -92,7 +92,7 @@ export default function Usage() {
                             <div className="usage-cards">
                                 {statsNames.map((statName) => (
                                     <section key={statName} className="usage-section">
-                                        <span className="usage-title">{statName}</span>
+                                        <span className="usage-title">{statName.toUpperCase()}</span>
                                         <TimePeriodTabs
                                             timePeriods={timeWindows}
                                             selectedPeriod={statPeriods[statName]}
