@@ -1,0 +1,85 @@
+.status-list,
+.paymaster-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.status-card {
+  flex: 1;
+  min-width: 280px;
+  max-width: 33.33%;
+  padding: 10px;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.status-title,
+.title {
+  margin: 0 1rem;
+  color: var(--strata-terracotta-med);
+}
+
+.status-badge {
+  padding: 2rem 10px;
+  margin: 0.5rem auto;
+  border: 1px solid black;
+  border-radius: 10px;
+  text-align: center;
+  display: flex;
+}
+
+.status-wrapper {
+  width: 100%;
+  height: auto;
+}
+
+.status-indicator {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  margin: 0 5px;
+  display: inline-block;
+}
+
+.status-indicator.online {
+  background-color: green;
+}
+
+.status-indicator.offline {
+  background-color: red;
+}
+
+.paymaster-container,
+.paymaster-list {
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  padding: 10px;
+}
+
+.paymaster-item {
+  margin: 0 10%;
+}
+
+.balance-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  text-align: center;
+  min-width: 150px;
+  border-bottom: 1px solid grey;
+}
+
+.title {
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.unit {
+  font-weight: bold;
+}
