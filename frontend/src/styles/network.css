@@ -17,6 +17,7 @@
 .title {
   margin: 0 1rem;
   color: black;
+  font-weight: 600;
 }
 
 .status-value {

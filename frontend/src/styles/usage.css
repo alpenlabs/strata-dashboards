@@ -19,6 +19,7 @@
 .usage-title {
   margin: 0 1rem;
   color: black;
+  font-weight: bold;
 }
 
 .usage-tab {
