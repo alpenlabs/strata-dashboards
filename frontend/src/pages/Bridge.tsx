@@ -26,16 +26,23 @@ export default function Bridge() {
                         ) : (
                             <div className="bridge-container">
                                 <div className="bridge-section">
-                                    <span className="bridge-title">Bridge operator status</span>
+                                    <span className="bridge-title">BRIDGE OPERATOR STATUS</span>
                                     { data && data.operators ? (
                                         <div className="table-wrapper">
                                             <table className="operators-table">
+                                                <thead>
+                                                    <tr className="operators-header">
+                                                        <th>Operator</th>
+                                                        <th>Public key</th>
+                                                        <th>Status</th>
+                                                    </tr>
+                                                </thead>
                                                 <tbody>
                                                     {data.operators.map((operator: OperatorStatus, index: number) => (
                                                         <tr key={index} className="operators-row">
                                                             <td className="table-cell">{operator.operator_id}</td>
                                                             <td className="table-cell">{truncateHex(operator.operator_address)}</td>
-                                                            <td className="table-cell">{operator.status}</td>
+                                                            <td className={`operator-status ${operator.status.toLowerCase()}`}>{operator.status}</td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -46,7 +53,7 @@ export default function Bridge() {
                                     )}
                                 </div>
                                 <div className="bridge-section">
-                                    <span className="bridge-title">Bridge deposit status</span>
+                                    <span className="bridge-title">BRIDGE DEPOSIT STATUS</span>
                                     { data && data.deposits ? (
                                         <div className="table-wrapper">
                                             <table className="transactions-table">
@@ -73,7 +80,7 @@ export default function Bridge() {
                                     )}
                                 </div>
                                 <div className="bridge-section">
-                                    <span className="bridge-title">Bridge withdrawal status</span>
+                                    <span className="bridge-title">BRIDGE WITHDRAWAL STATUS</span>
                                     { data && data.withdrawals ? (
                                         <div className="table-wrapper">
                                             <table className="transactions-table">
@@ -100,7 +107,7 @@ export default function Bridge() {
                                     )}
                                 </div>
                                 <div className="bridge-section">
-                                    <span className="bridge-title">Bridge reimbursement status</span>
+                                    <span className="bridge-title">BRIDGE REIMBURSEMENT STATUS</span>
                                     { data && data.reimbursements ? (
                                         <div className="table-wrapper">
                                             <table className="transactions-table">

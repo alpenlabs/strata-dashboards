@@ -1,3 +1,5 @@
+import "../styles/network.css";
+
 interface BalanceCardProps {
     title: string;
     balance: string;
@@ -5,9 +7,9 @@ interface BalanceCardProps {
 
 const BalanceCard = ({ title, balance }: BalanceCardProps) => {
     return (
-        <div className="balance-card">
-            <span className="title">{title}</span>
-            <span className="balance"><span className="unit">BTC</span> {balance}</span>
+        <div className="balance-item">
+            <span className="balance-title">{title}</span>
+            <span className="balance-value"><span>BTC</span> {balance}</span>
         </div>
     );
 };
