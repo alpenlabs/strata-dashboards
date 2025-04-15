@@ -43,6 +43,7 @@
   color: red;
 }
 
+.operators-header th,
 .transactions-header th,
 .operators-row td,
 .transactions-row td {
@@ -52,6 +53,7 @@
 
 .operators-row td:first-child,
 .transactions-row td:first-child,
+.operators-header th:first-child,
 .transactions-header th:first-child {
   text-align: left;
   padding-left: 0;
@@ -59,12 +61,14 @@
 
 .operators-row td:last-child,
 .transactions-row td:last-child,
+.operators-header th:last-child,
 .transactions-header th:last-child {
   text-align: right;
 }
 
 .operators-row td:not(:first-child):not(:last-child),
 .transactions-row td:not(:first-child):not(:last-child),
+.operators-header th:not(:first-child):not(:last-child),
 .transactions-header th:not(:first-child):not(:last-child) {
   text-align: center;
 }

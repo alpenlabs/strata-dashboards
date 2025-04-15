@@ -30,6 +30,13 @@ export default function Bridge() {
                                     { data && data.operators ? (
                                         <div className="table-wrapper">
                                             <table className="operators-table">
+                                                <thead>
+                                                    <tr className="operators-header">
+                                                        <th>Operator</th>
+                                                        <th>Public key</th>
+                                                        <th>Status</th>
+                                                    </tr>
+                                                </thead>
                                                 <tbody>
                                                     {data.operators.map((operator: OperatorStatus, index: number) => (
                                                         <tr key={index} className="operators-row">
