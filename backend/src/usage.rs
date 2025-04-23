@@ -1,19 +1,17 @@
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
 use axum::Json;
-use chrono::{
-    Utc,
-    DateTime,
-    TimeZone,
-    Duration,
-    Datelike
-};
-use dotenvy::dotenv;
-use serde::{Deserialize, Serialize};
+use chrono::{DateTime, Datelike, Duration, TimeZone, Utc};
 use serde::de::{self, Deserializer};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{fs, env, sync::Arc, collections::{HashMap, HashSet}};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 use tokio::{sync::RwLock, time::interval};
 use tracing::{error, info};
+
+use crate::config::UsageMonitoringConfig;
 
 /// Enum for usage statistics
 #[derive(Debug, Eq, PartialEq, Hash, Deserialize)]
@@ -63,55 +61,10 @@ enum SelectAccountsBy {
 
 /// Struct for holding parsed JSON
 #[derive(Debug, PartialEq, Deserialize)]
-struct UsageStatsKeys {
+pub(crate) struct UsageStatsKeys {
     usage_stat_names: HashMap<UsageStatName, String>,
     time_windows: HashMap<TimeWindow, String>,
     select_accounts_by: HashMap<SelectAccountsBy, String>,
-}
-
-pub struct UsageMonitoringConfig {
-    user_ops_query_url: String,
-    accounts_query_url: String,
-    stats_refetch_interval_s: u64,
-    query_page_size: u64,
-    usage_stats_keys: UsageStatsKeys,
-}
-
-impl UsageMonitoringConfig {
-    pub fn new() -> Self {
-        dotenv().ok(); // Load `.env` file if present
-
-        let user_ops_query_url = env::var("USER_OPS_QUERY_URL").ok()
-            .unwrap_or_else(|| {
-                "http://localhost/api/v2/proxy/account-abstraction/operations".to_string()
-            });
-
-        let accounts_query_url = env::var("ACCOUNTS_QUERY_URL").ok()
-            .unwrap_or_else(|| "http://localhost/api/v2/proxy/account-abstraction/accounts".to_string());
-
-        let refresh_interval_s = env::var("USAGE_STATS_REFETCH_INTERVAL_S").ok()
-            .unwrap_or_else(|| "120".to_string());
-        let refetch_interval_s_u64: u64 = refresh_interval_s.parse().expect("Failed to parse USAGE_STATS_REFETCH_INTERVAL_S as u64");
-        let query_page_size = env::var("USAGE_QUERY_PAGE_SIZE").ok().unwrap_or_else(|| "100".to_string());
-        let query_page_size_u64: u64 = query_page_size.parse().expect("Failed to parse USAGE_QUERY_PAGE_SIZE as u64");
-
-        let usage_stats_keys = UsageMonitoringConfig::load_usage_keys();
-
-        UsageMonitoringConfig {
-            user_ops_query_url,
-            accounts_query_url,
-            stats_refetch_interval_s: refetch_interval_s_u64,
-            query_page_size: query_page_size_u64,
-            usage_stats_keys,
-        }
-    }
-
-    /// Read keys used in reporting usages from a json file.
-    fn load_usage_keys() -> UsageStatsKeys {
-        // Path relative to backend
-        let data = fs::read_to_string("usage_keys.json").expect("Unable to read file");
-        serde_json::from_str(&data).expect("JSON parsing failed")
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -162,19 +115,27 @@ pub struct UsageStats {
 
 impl UsageStats {
     pub fn default(config: &UsageMonitoringConfig) -> UsageStats {
-        let mut stats = HashMap::new();
-        for (_, stat_name) in &config.usage_stats_keys.usage_stat_names {
-            let mut stat_values = HashMap::new();
-            for (_, time_window) in &config.usage_stats_keys.time_windows {
-                stat_values.insert(time_window.to_string(), 0u64);
-            }
-            stats.insert(stat_name.to_string(), stat_values);
-        }
+        let stats: HashMap<String, HashMap<String, u64>> = config
+            .usage_stats_keys()
+            .usage_stat_names
+            .values()
+            .map(|stat_name| {
+                let inner: HashMap<String, u64> = config
+                    .usage_stats_keys()
+                    .time_windows
+                    .values()
+                    .map(|window| (window.clone(), 0u64))
+                    .collect();
+                (stat_name.clone(), inner)
+            })
+            .collect();
 
-        let mut selected_accounts = HashMap::new();
-        for (_, select_by) in &config.usage_stats_keys.select_accounts_by {
-            selected_accounts.insert(select_by.to_string(), Vec::new());
-        }
+        let selected_accounts: HashMap<_, Vec<Account>> = config
+            .usage_stats_keys()
+            .select_accounts_by
+            .values()
+            .map(|key| (key.to_owned(), Vec::new()))
+            .collect();
 
         UsageStats {
             stats,
@@ -191,7 +152,9 @@ type AccountsGasUsage = HashMap<String, u64>;
 
 /// Periodically fetch user operations and accounts and compute usage stats
 pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &UsageMonitoringConfig) {
-    let mut interval = interval(tokio::time::Duration::from_secs(config.stats_refetch_interval_s));
+    let mut interval = interval(tokio::time::Duration::from_secs(
+        config.stats_refetch_interval(),
+    ));
 
     loop {
         interval.tick().await;
@@ -211,17 +174,21 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
         // Aggregate gas used per sender (in the last 24 hours)
         let mut gas_usage: AccountsGasUsage = HashMap::new();
 
-        let time_windows: Vec<(String, Duration)> = config.usage_stats_keys.time_windows
+        let time_windows: Vec<(String, Duration)> = config
+            .usage_stats_keys()
+            .time_windows
             .iter()
-            .map(|(tw, tw_value)| {
-                (tw_value.clone(), tw.to_duration(now))
-            })
+            .map(|(tw, tw_value)| (tw_value.clone(), tw.to_duration(now)))
             .collect();
 
         // Initialize or reset stats
         for (period, _) in &time_windows {
-            for (_, stat_name) in &config.usage_stats_keys.usage_stat_names {
-                locked_stats.stats.entry(stat_name.clone()).or_default().insert(period.to_string(), 0);
+            for stat_name in config.usage_stats_keys().usage_stat_names.values() {
+                locked_stats
+                    .stats
+                    .entry(stat_name.clone())
+                    .or_default()
+                    .insert(period.to_string(), 0);
             }
         }
 
@@ -234,19 +201,32 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
         let mut more_items = true;
         let mut page_token = None;
         while more_items {
-            let result = fetch_user_ops(&http_client, &config.user_ops_query_url,
-                start_time, now,
-                Some(config.query_page_size), page_token).await;
+            let result = fetch_user_ops(
+                &http_client,
+                config.user_ops_query_url(),
+                start_time,
+                now,
+                Some(config.query_page_size()),
+                page_token,
+            )
+            .await;
 
             match result {
                 Ok(response) => {
                     // compute stats for each TIME_WINDOW
                     for entry in response.user_ops {
-                        if let Ok(op_time) = DateTime::parse_from_rfc3339(&entry.timestamp).map(|dt| dt.with_timezone(&Utc)) {
+                        if let Ok(op_time) = DateTime::parse_from_rfc3339(&entry.timestamp)
+                            .map(|dt| dt.with_timezone(&Utc))
+                        {
                             for (period, duration) in &time_windows {
                                 if now - *duration <= op_time {
-                                    for (stat_key, stat_name) in &config.usage_stats_keys.usage_stat_names {
-                                        if matches!(stat_key, UsageStatName::UserOps | UsageStatName::GasUsed) {
+                                    for (stat_key, stat_name) in
+                                        &config.usage_stats_keys().usage_stat_names
+                                    {
+                                        if matches!(
+                                            stat_key,
+                                            UsageStatName::UserOps | UsageStatName::GasUsed
+                                        ) {
                                             *locked_stats
                                                 .stats
                                                 .entry(stat_name.clone()) // Get or insert HashMap entry
@@ -256,12 +236,16 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
                                         }
                                     }
                                     // Track unique senders
-                                    unique_accounts.get_mut(period).unwrap().insert(entry.sender.clone());
+                                    unique_accounts
+                                        .get_mut(period)
+                                        .unwrap()
+                                        .insert(entry.sender.clone());
                                 }
                             }
                             // Update gas used by sender
                             if now - Duration::days(1) <= op_time {
-                                *gas_usage.entry(entry.sender.clone()).or_insert(0) += entry.gas_used;
+                                *gas_usage.entry(entry.sender.clone()).or_insert(0) +=
+                                    entry.gas_used;
                             }
                         }
                     }
@@ -269,8 +253,7 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
                     page_token = response.next_page_token;
                     more_items = page_token.is_some();
                 }
-                Err(e) =>
-                {
+                Err(e) => {
                     error!(error = %e, "Fetch user ops failed");
                     break;
                 }
@@ -281,34 +264,44 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
         for (period, accounts_set) in unique_accounts {
             locked_stats
                 .stats
-                .entry(config.usage_stats_keys.usage_stat_names[&UsageStatName::UniqueActiveAccounts].clone()) // Use enum variant
+                .entry(
+                    config.usage_stats_keys().usage_stat_names
+                        [&UsageStatName::UniqueActiveAccounts]
+                        .clone(),
+                ) // Use enum variant
                 .or_default()
                 .insert(period.to_string(), accounts_set.len() as u64);
-
         }
 
         let mut more_items = true;
         let mut page_token = None;
         while more_items {
-            let result = fetch_accounts(&http_client, &config.accounts_query_url,
-                start_time, now,
-                Some(config.query_page_size), page_token).await;
+            let result = fetch_accounts(
+                &http_client,
+                config.accounts_query_url(),
+                start_time,
+                now,
+                Some(config.query_page_size()),
+                page_token,
+            )
+            .await;
             match result {
                 Ok(response) => {
                     // Sort accounts by creation_timestamp (most recent first)
-                    let mut sorted_accounts: Vec<Account> = response.accounts
+                    let mut sorted_accounts: Vec<Account> = response
+                        .accounts
                         .iter()
-                        .filter(|acc| acc.creation_timestamp != "".to_string()) // Ignore accounts without a timestamp
+                        .filter(|acc| !acc.creation_timestamp.is_empty())
                         .cloned()
                         .collect();
 
                     sorted_accounts.sort_by(|a, b| {
-                        let a_time = DateTime::parse_from_rfc3339(&a.creation_timestamp.as_str())
+                        let a_time = DateTime::parse_from_rfc3339(a.creation_timestamp.as_str())
                             .map(|dt| dt.with_timezone(&Utc))
                             .unwrap_or(Utc::now()); // Default to now if parsing fails
                         let b_time = DateTime::parse_from_rfc3339(b.creation_timestamp.as_str())
                             .map(|dt| dt.with_timezone(&Utc))
-                            .unwrap_or(Utc::now()); 
+                            .unwrap_or(Utc::now());
 
                         b_time.cmp(&a_time) // Sort descending
                     });
@@ -316,13 +309,16 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
                     // Take the top 5 most recent accounts
                     let recent_accounts = sorted_accounts.into_iter().take(5).collect::<Vec<_>>();
                     // Store in shared stats
-                    locked_stats.selected_accounts.insert(config.usage_stats_keys.select_accounts_by[&SelectAccountsBy::Recent].clone(), recent_accounts);
+                    locked_stats.selected_accounts.insert(
+                        config.usage_stats_keys().select_accounts_by[&SelectAccountsBy::Recent]
+                            .clone(),
+                        recent_accounts,
+                    );
 
                     page_token = response.next_page_token;
                     more_items = page_token.is_some();
                 }
-                Err(e) =>
-                {
+                Err(e) => {
                     error!(error = %e, "Fetch accounts failed");
                     break;
                 }
@@ -333,7 +329,11 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
         let gas_usage_clone = gas_usage.clone();
         let mut top_gas_consumers: Vec<Account> = gas_usage_clone
             .into_iter()
-            .map(|(address, gas_used)| Account { address, creation_timestamp: "".to_string(), gas_used })
+            .map(|(address, gas_used)| Account {
+                address,
+                creation_timestamp: "".to_string(),
+                gas_used,
+            })
             .collect();
 
         top_gas_consumers.sort_by_key(|acc| gas_usage.get(&acc.address).cloned().unwrap_or(0));
@@ -341,7 +341,11 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
         top_gas_consumers.truncate(5); // Take top 5
 
         // Store in shared stats
-        locked_stats.selected_accounts.insert(config.usage_stats_keys.select_accounts_by[&SelectAccountsBy::TopGasConsumers24h].clone(), top_gas_consumers);
+        locked_stats.selected_accounts.insert(
+            config.usage_stats_keys().select_accounts_by[&SelectAccountsBy::TopGasConsumers24h]
+                .clone(),
+            top_gas_consumers,
+        );
     }
 }
 
@@ -382,14 +386,17 @@ where
     }
 }
 
-async fn fetch_usage_common(http_client: &reqwest::Client, query_url: &str,
-    start_time: DateTime<Utc>, end_time: DateTime<Utc>,
-    page_size: Option<u64>, page_token: Option<String>) -> Result<serde_json::Value, anyhow::Error> {
-
-     // Format to YYYY-MM-DD HH:MM:SS
-    let format_time = |time: DateTime<Utc>| -> String {
-        time.format("%Y-%m-%d %H:%M:%S").to_string()
-    };
+async fn fetch_usage_common(
+    http_client: &reqwest::Client,
+    query_url: &str,
+    start_time: DateTime<Utc>,
+    end_time: DateTime<Utc>,
+    page_size: Option<u64>,
+    page_token: Option<String>,
+) -> Result<serde_json::Value, anyhow::Error> {
+    // Format to YYYY-MM-DD HH:MM:SS
+    let format_time =
+        |time: DateTime<Utc>| -> String { time.format("%Y-%m-%d %H:%M:%S").to_string() };
 
     // Construct query parameters, only adding Some(_) values
     let mut query_params: HashMap<&str, String> = HashMap::new();
@@ -417,19 +424,31 @@ async fn fetch_usage_common(http_client: &reqwest::Client, query_url: &str,
     Ok(response)
 }
 
-async fn fetch_user_ops(http_client: &reqwest::Client, query_url: &str,
-    start_time: DateTime<Utc>, end_time: DateTime<Utc>,
-    page_size: Option<u64>, page_token: Option<String>) -> Result<UserOpsResponse, anyhow::Error> {
+async fn fetch_user_ops(
+    http_client: &reqwest::Client,
+    query_url: &str,
+    start_time: DateTime<Utc>,
+    end_time: DateTime<Utc>,
+    page_size: Option<u64>,
+    page_token: Option<String>,
+) -> Result<UserOpsResponse, anyhow::Error> {
     info!("Fetching user operations");
 
-    let data = fetch_usage_common(http_client, query_url, start_time, end_time, page_size, page_token)
-        .await
-        .context("Failed to fetch user operations")?;
+    let data = fetch_usage_common(
+        http_client,
+        query_url,
+        start_time,
+        end_time,
+        page_size,
+        page_token,
+    )
+    .await
+    .context("Failed to fetch user operations")?;
 
     // Extract "items" and deserialize into Vec<UserOp>
     let items = data.get("items").context("Missing 'items' in response")?;
-    let user_ops: Vec<UserOp> = serde_json::from_value(items.clone())
-        .context("Failed to deserialize user ops")?;
+    let user_ops: Vec<UserOp> =
+        serde_json::from_value(items.clone()).context("Failed to deserialize user ops")?;
 
     // Extract next_page_token safely
     let next_page_token = data
@@ -444,19 +463,33 @@ async fn fetch_user_ops(http_client: &reqwest::Client, query_url: &str,
     })
 }
 
-async fn fetch_accounts(http_client: &reqwest::Client, query_url: &String,
-    start_time: DateTime<Utc>, end_time: DateTime<Utc>,
-    page_size: Option<u64>, page_token: Option<String>) -> Result<AccountsResponse, anyhow::Error> {
+async fn fetch_accounts(
+    http_client: &reqwest::Client,
+    query_url: &str,
+    start_time: DateTime<Utc>,
+    end_time: DateTime<Utc>,
+    page_size: Option<u64>,
+    page_token: Option<String>,
+) -> Result<AccountsResponse, anyhow::Error> {
     info!("Fetching accounts");
 
-    let data = fetch_usage_common(http_client, query_url, start_time, end_time, page_size, page_token)
-        .await
-        .context("Failed to fetch accounts")?;
+    let data = fetch_usage_common(
+        http_client,
+        query_url,
+        start_time,
+        end_time,
+        page_size,
+        page_token,
+    )
+    .await
+    .context("Failed to fetch accounts")?;
 
     // Extract "items" field safely
-    let items = data.get("items").context("Missing 'items' field in response")?;
-    let accounts: Vec<Account> = serde_json::from_value(items.clone())
-        .context("Failed to deserialize accounts")?;
+    let items = data
+        .get("items")
+        .context("Missing 'items' field in response")?;
+    let accounts: Vec<Account> =
+        serde_json::from_value(items.clone()).context("Failed to deserialize accounts")?;
 
     // Extract next_page_token safely
     let next_page_token = data
@@ -479,29 +512,33 @@ pub async fn get_usage_stats(state: SharedUsageStats) -> Json<UsageStats> {
 #[cfg(test)]
 mod tests {
     use crate::usage::{
-        TimeWindow,
-        UsageMonitoringConfig,
-        UsageStats,
-        fetch_user_ops,
-        fetch_accounts,
-        convert_to_u64,
-        get_address_hash,
+        convert_to_u64, fetch_accounts, fetch_user_ops, get_address_hash, TimeWindow,
+        UsageMonitoringConfig, UsageStats,
     };
-    use chrono::{Utc, TimeZone, Datelike};
-    use mockito::{Server, Matcher};
-    use serde_json::json;
+    use chrono::{Datelike, TimeZone, Utc};
+    use mockito::{Matcher, Server};
     use serde::Deserialize;
+    use serde_json::json;
 
     #[test]
     fn test_time_window_to_duration() {
         let now = Utc.with_ymd_and_hms(2025, 2, 17, 0, 0, 0).unwrap();
 
-        assert_eq!(TimeWindow::Last24Hours.to_duration(now), chrono::Duration::days(1));
-        assert_eq!(TimeWindow::Last30Days.to_duration(now), chrono::Duration::days(30));
+        assert_eq!(
+            TimeWindow::Last24Hours.to_duration(now),
+            chrono::Duration::days(1)
+        );
+        assert_eq!(
+            TimeWindow::Last30Days.to_duration(now),
+            chrono::Duration::days(30)
+        );
 
         // Year to date should return the number of days since Jan 1st
         let expected_days = now.ordinal() as i64;
-        assert_eq!(TimeWindow::YearToDate.to_duration(now), chrono::Duration::days(expected_days));
+        assert_eq!(
+            TimeWindow::YearToDate.to_duration(now),
+            chrono::Duration::days(expected_days)
+        );
     }
 
     #[test]
@@ -509,16 +546,29 @@ mod tests {
         let config = UsageMonitoringConfig::new();
         let stats = UsageStats::default(&config);
 
-        for (_, stat_name) in &config.usage_stats_keys.usage_stat_names {
-            assert!(stats.stats.contains_key(stat_name));
-            for (_, time_window) in &config.usage_stats_keys.time_windows {
-                assert_eq!(stats.stats[stat_name].get(time_window), Some(&0));
+        for stat_name in config.usage_stats_keys().usage_stat_names.values() {
+            let inner = stats.stats.get(stat_name).expect("Missing stat name key");
+            for time_window in config.usage_stats_keys().time_windows.values() {
+                assert_eq!(
+                    inner.get(time_window),
+                    Some(&0),
+                    "Expected stat value 0 for {} in {}",
+                    stat_name,
+                    time_window
+                );
             }
         }
 
-        for (_, select_by) in &config.usage_stats_keys.select_accounts_by {
-            assert!(stats.selected_accounts.contains_key(select_by));
-            assert!(stats.selected_accounts[select_by].is_empty());
+        for select_by in config.usage_stats_keys().select_accounts_by.values() {
+            let accounts = stats
+                .selected_accounts
+                .get(select_by)
+                .expect("Missing selected_accounts key");
+            assert!(
+                accounts.is_empty(),
+                "Expected empty accounts list for {}",
+                select_by
+            );
         }
     }
 
@@ -529,11 +579,11 @@ mod tests {
             #[serde(deserialize_with = "convert_to_u64")]
             fee: u64,
         }
-    
+
         let json_data = json!({ "fee": "12345" });
         let obj: TestFee = serde_json::from_value(json_data).unwrap();
         assert_eq!(obj.fee, 12345);
-    
+
         let json_data = json!({ "fee": "invalid" });
         let result: Result<TestFee, _> = serde_json::from_value(json_data);
         assert!(result.is_err());
@@ -562,32 +612,38 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     async fn test_fetch_user_ops() {
-        // ✅ Use the async version of mockito server
+        // Use the async version of mockito server
         let mut server = Server::new_async().await;
 
-        let mock_endpoint = server.mock("GET", Matcher::Regex(r"^/user_ops(\?.*)?$".to_string()))
+        let mock_endpoint = server
+            .mock("GET", Matcher::Regex(r"^/user_ops(\?.*)?$".to_string()))
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(json!({
-                "items": [
-                    {
-                        "address": { "hash": "0x123456789abcdef" },
-                        "fee": "100",
-                        "timestamp": "2024-03-10T12:00:00Z"
-                    }
-                ]
-            }).to_string())
+            .with_body(
+                json!({
+                    "items": [
+                        {
+                            "address": { "hash": "0x123456789abcdef" },
+                            "fee": "100",
+                            "timestamp": "2024-03-10T12:00:00Z"
+                        }
+                    ]
+                })
+                .to_string(),
+            )
             .create();
 
         let url = format!("{}/user_ops", server.url());
 
-        // ✅ Use a persistent reqwest client
+        // Use a persistent reqwest client
         let client = reqwest::Client::new();
         let start_time = Utc::now() - chrono::Duration::days(1);
         let end_time = Utc::now();
 
-        // ✅ Await the async call properly
-        let result = fetch_user_ops(&client, &url, start_time, end_time, Some(5), None).await.unwrap();
+        // Await the async call properly
+        let result = fetch_user_ops(&client, &url, start_time, end_time, Some(5), None)
+            .await
+            .unwrap();
         // Ensures the request actually hit the mock server
         mock_endpoint.assert();
         let ops = result.user_ops;
@@ -602,18 +658,22 @@ mod tests {
     async fn test_fetch_accounts() {
         let mut server = Server::new_async().await;
 
-        // ✅ Ensure the mock server recognizes `/accounts`
-        let mock_endpoint = server.mock("GET", Matcher::Regex(r"^/accounts(\?.*)?$".to_string()))
+        // Ensure the mock server recognizes `/accounts`
+        let mock_endpoint = server
+            .mock("GET", Matcher::Regex(r"^/accounts(\?.*)?$".to_string()))
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(json!({
-                "items": [
-                    {
-                        "address": { "hash": "0xabcdef123456" },
-                        "creation_timestamp": "2024-03-10T12:00:00Z",
-                    }
-                ]
-            }).to_string())
+            .with_body(
+                json!({
+                    "items": [
+                        {
+                            "address": { "hash": "0xabcdef123456" },
+                            "creation_timestamp": "2024-03-10T12:00:00Z",
+                        }
+                    ]
+                })
+                .to_string(),
+            )
             .create();
 
         let url = format!("{}/accounts", server.url());
@@ -622,7 +682,9 @@ mod tests {
         let start_time = Utc::now() - chrono::Duration::days(1);
         let end_time = Utc::now();
 
-        let result = fetch_accounts(&client, &url, start_time, end_time, Some(5), None).await.unwrap();
+        let result = fetch_accounts(&client, &url, start_time, end_time, Some(5), None)
+            .await
+            .unwrap();
         // Ensures the request actually hit the mock server
         mock_endpoint.assert();
         let accounts = result.accounts;
