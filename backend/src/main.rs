@@ -71,6 +71,7 @@ async fn call_rpc_status(
                 if retry_count < config.max_retries() {
                     let delay_seconds = retry_policy.get_delay(retry_count);
                     if delay_seconds > 0 {
+                        info!(?delay_seconds, "Retrying `strata_syncStatus` after");
                         sleep(Duration::from_secs(delay_seconds)).await;
                     }
                     retry_count += 1;
