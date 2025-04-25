@@ -39,16 +39,6 @@ export default function Usage() {
         select_accounts_by: Record<string, string>;
     };
 
-    async function loadUsageKeys(): Promise<UsageKeys> {
-        const response = await fetch("/usage_keys.json");
-        if (!response.ok) {
-            throw new Error(
-                `Failed to load usage keys: ${response.statusText}`,
-            );
-        }
-        return response.json();
-    }
-
     // Usage stats keys
     const [statsNames, setUsageStatNames] = useState<string[]>([]);
     const [timeWindows, setTimeWindows] = useState<string[]>([]);
@@ -57,8 +47,16 @@ export default function Usage() {
     >([]);
 
     useEffect(() => {
-        loadUsageKeys()
-            .then((keys) => {
+        async function loadUsageKeys() {
+            try {
+                const response = await fetch("/usage_keys.json");
+                if (!response.ok) {
+                    throw new Error(
+                        `Failed to load usage keys: ${response.statusText}`,
+                    );
+                }
+                const keys: UsageKeys = await response.json();
+
                 setUsageStatNames(Object.values(keys.usage_stat_names));
                 setTimeWindows(Object.values(keys.time_windows));
                 setSelectAccountsBy(
@@ -66,8 +64,12 @@ export default function Usage() {
                         ([key, value]) => ({ key, value }),
                     ),
                 );
-            })
-            .catch(console.error);
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        loadUsageKeys();
     }, []);
 
     const [statPeriods, setStatPeriods] = useState<Record<string, string>>(
