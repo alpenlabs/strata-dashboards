@@ -1,6 +1,6 @@
 mod bridge;
 mod config;
-mod exp_backoff;
+mod retry_policy;
 mod usage;
 mod utils;
 mod wallets;
@@ -22,7 +22,7 @@ use tracing::{error, info};
 use crate::{
     bridge::{bridge_monitoring_task, get_bridge_status, SharedBridgeState},
     config::{BridgeMonitoringConfig, NetworkConfig, UsageMonitoringConfig},
-    exp_backoff::ExponentialBackoff,
+    retry_policy::ExponentialBackoff,
     usage::{get_usage_stats, usage_monitoring_task, UsageStats},
     utils::create_rpc_client,
     wallets::{

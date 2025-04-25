@@ -1,3 +1,6 @@
+/// Exponential backoff for rpc requests
+///
+/// NOTE: This is borrowed from prover code.
 #[derive(Clone, Copy, Debug)]
 pub struct ExponentialBackoff {
     /// Maximum number of retries.
