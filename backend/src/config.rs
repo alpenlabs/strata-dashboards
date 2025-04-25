@@ -17,7 +17,7 @@ pub(crate) struct NetworkConfig {
     /// Max retries in querying status
     max_retries: u64,
 
-    /// Total time to spend retrying
+    /// Total time in seconds to spend retrying
     total_retry_time: u64,
 
     /// Deposit paymaster wallet
@@ -51,7 +51,7 @@ impl NetworkConfig {
         let total_retry_time: u64 = std::env::var("TOTAL_RETRY_TIME")
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(5);
+            .unwrap_or(60);
 
         let deposit_wallet = std::env::var("DEPOSIT_PAYMASTER_WALLET")
             .ok()
