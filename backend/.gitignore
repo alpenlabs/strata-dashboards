@@ -10,7 +10,6 @@
 
 # Ignore IntelliJ Rust, CLion and other IDE files
 .idea/
-.vscode/
 
 # Ignore OS-specific files
 .DS_Store
@@ -26,9 +25,6 @@ Thumbs.db
 
 # Ignore any config files related to local builds, e.g., `cargo` config, etc.
 /cargo-config.toml
-
-
-.vscode/*
 
 batches_db
 

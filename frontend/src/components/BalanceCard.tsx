@@ -9,7 +9,9 @@ const BalanceCard = ({ title, balance }: BalanceCardProps) => {
     return (
         <div className="balance-item">
             <span className="balance-title">{title}</span>
-            <span className="balance-value"><span>BTC</span> {balance}</span>
+            <span className="balance-value">
+                <span>BTC</span> {balance}
+            </span>
         </div>
     );
 };

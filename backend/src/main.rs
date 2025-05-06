@@ -1,29 +1,33 @@
-mod config;
-mod wallets;
-mod utils;
 mod bridge;
+mod config;
+mod retry_policy;
 mod usage;
+mod utils;
+mod wallets;
 
 use axum::{routing::get, Json, Router};
 use dotenvy::dotenv;
-use jsonrpsee::http_client::HttpClient;
 use jsonrpsee::core::client::ClientT;
+use jsonrpsee::http_client::HttpClient;
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
-use tokio::{net::TcpListener, time::{interval, Duration}, sync::RwLock};
+use tokio::{
+    net::TcpListener,
+    sync::RwLock,
+    time::{interval, sleep, Duration},
+};
 use tower_http::cors::{Any, CorsLayer};
-use tracing_subscriber;
-use tracing::{info, error};
+use tracing::{error, info};
 
-use config::Config;
-use crate::wallets::{ SharedWallets, fetch_balances_task, get_wallets_with_balances, init_paymaster_wallets};
-use bridge::{BridgeMonitoringConfig, SharedBridgeState, bridge_monitoring_task, get_bridge_status};
-use crate::utils::create_rpc_client;
-use crate::usage::{
-    UsageMonitoringConfig,
-    UsageStats,
-    usage_monitoring_task,
-    get_usage_stats
+use crate::{
+    bridge::{bridge_monitoring_task, get_bridge_status, SharedBridgeState},
+    config::{BridgeMonitoringConfig, NetworkConfig, UsageMonitoringConfig},
+    retry_policy::ExponentialBackoff,
+    usage::{get_usage_stats, usage_monitoring_task, UsageStats},
+    utils::create_rpc_client,
+    wallets::{
+        fetch_balances_task, get_wallets_with_balances, init_paymaster_wallets, SharedWallets,
+    },
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -44,27 +48,44 @@ struct NetworkStatus {
 type SharedNetworkState = Arc<RwLock<NetworkStatus>>;
 
 /// Calls `strata_syncStatus` using `jsonrpsee`
-async fn call_rpc_status(client: &HttpClient) -> Status {
-    let response: Result<serde_json::Value, _> = client.request("strata_syncStatus", Vec::<()>::new()).await;
+async fn call_rpc_status(
+    config: &NetworkConfig,
+    client: &HttpClient,
+    retry_policy: ExponentialBackoff,
+) -> Status {
+    let mut retry_count: u64 = 0;
 
-    match response {
-        Ok(json) => {
-            info!(?json, "RPC Response");
-            if json.get("tip_height").is_some() {
-                Status::Online
-            } else {
-                Status::Offline
+    loop {
+        let response: Result<serde_json::Value, _> =
+            client.request("strata_syncStatus", Vec::<()>::new()).await;
+        match response {
+            Ok(json) => {
+                info!(?json, "RPC Response");
+                if json.get("tip_height").is_some() {
+                    return Status::Online;
+                } else {
+                    return Status::Offline;
+                }
             }
-        }
-        Err(e) => {
-            error!(error = %e, "Could not get status");
-            Status::Offline
+            Err(e) => {
+                if retry_count < config.max_retries() {
+                    let delay_seconds = retry_policy.get_delay(retry_count);
+                    if delay_seconds > 0 {
+                        info!(?delay_seconds, "Retrying `strata_syncStatus` after");
+                        sleep(Duration::from_secs(delay_seconds)).await;
+                    }
+                    retry_count += 1;
+                } else {
+                    error!(error = %e, "Could not get status");
+                    return Status::Offline;
+                }
+            }
         }
     }
 }
 
 /// Checks bundler health (`/health`)
-async fn check_bundler_health(client: &reqwest::Client, config: &Config) -> Status {
+async fn check_bundler_health(client: &reqwest::Client, config: &NetworkConfig) -> Status {
     let url = config.bundler_url();
     if let Ok(resp) = client.get(url).send().await {
         let body = resp.text().await.unwrap_or_default();
@@ -76,17 +97,19 @@ async fn check_bundler_health(client: &reqwest::Client, config: &Config) -> Stat
 }
 
 /// Periodically fetches real statuses
-async fn fetch_statuses_task(state: SharedNetworkState, config: &Config) {
+async fn fetch_statuses_task(state: SharedNetworkState, config: &NetworkConfig) {
     info!("Fetching statuses...");
     let mut interval = interval(Duration::from_secs(10));
-    let rpc_client = create_rpc_client(&config.rpc_url());
+    let rpc_client = create_rpc_client(config.rpc_url());
     let http_client = reqwest::Client::new();
+    let retry_policy =
+        ExponentialBackoff::new(config.max_retries(), config.total_retry_time(), 1.5);
 
     loop {
         interval.tick().await;
 
-        let batch_producer = call_rpc_status(&rpc_client).await;
-        let rpc_endpoint = call_rpc_status(&rpc_client).await;
+        let batch_producer = call_rpc_status(config, &rpc_client, retry_policy).await;
+        let rpc_endpoint = call_rpc_status(config, &rpc_client, retry_policy).await;
         let bundler_endpoint = check_bundler_health(&http_client, config).await;
 
         let new_status = NetworkStatus {
@@ -116,7 +139,7 @@ async fn main() {
 
     dotenv().ok();
 
-    let config = Arc::new(config::Config::new());
+    let config = Arc::new(config::NetworkConfig::new());
 
     let cors = CorsLayer::new().allow_origin(Any);
 
@@ -132,29 +155,25 @@ async fn main() {
     // Spawn a background task to fetch real statuses
     let state_clone = Arc::clone(&shared_state);
     let paymaster_wallets_clone = Arc::clone(&paymaster_wallets);
-    tokio::spawn(
-    {
+    tokio::spawn({
         let config = Arc::clone(&config);
         async move {
-        fetch_statuses_task(state_clone, &config).await;
+            fetch_statuses_task(state_clone, &config).await;
         }
     });
-    tokio::spawn(
-    {
+    tokio::spawn({
         let config = Arc::clone(&config.clone());
         async move {
             fetch_balances_task(paymaster_wallets_clone, &config).await;
         }
-    }
-    );
+    });
 
     // Usage monitoring
     let usage_monitoring_config = UsageMonitoringConfig::new();
     let usage_stats = UsageStats::default(&usage_monitoring_config);
     // Shared state for usage stats
     let shared_usage_stats = Arc::new(RwLock::new(usage_stats));
-    tokio::spawn(
-    {
+    tokio::spawn({
         let usage_stats_clone = Arc::clone(&shared_usage_stats);
         async move {
             usage_monitoring_task(usage_stats_clone, &usage_monitoring_config).await;
@@ -165,20 +184,30 @@ async fn main() {
     let bridge_monitoring_config = BridgeMonitoringConfig::new();
     // Shared state for bridge status
     let bridge_state = SharedBridgeState::default();
-    tokio::spawn(
-    {
+    tokio::spawn({
         let bridge_state_clone = Arc::clone(&bridge_state);
         async move {
             bridge_monitoring_task(bridge_state_clone, &bridge_monitoring_config).await;
         }
     });
 
-
     let app = Router::new()
-        .route("/api/status", get(move || get_network_status(Arc::clone(&shared_state))))
-        .route("/api/balances", get(move || get_wallets_with_balances( paymaster_wallets)))
-        .route("/api/bridge_status", get(move || get_bridge_status(Arc::clone(&bridge_state))))
-        .route("/api/usage_stats", get(move || get_usage_stats(Arc::clone(&shared_usage_stats))))
+        .route(
+            "/api/status",
+            get(move || get_network_status(Arc::clone(&shared_state))),
+        )
+        .route(
+            "/api/balances",
+            get(move || get_wallets_with_balances(paymaster_wallets)),
+        )
+        .route(
+            "/api/bridge_status",
+            get(move || get_bridge_status(Arc::clone(&bridge_state))),
+        )
+        .route(
+            "/api/usage_stats",
+            get(move || get_usage_stats(Arc::clone(&shared_usage_stats))),
+        )
         .layer(cors);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
