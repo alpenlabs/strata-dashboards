@@ -18,4 +18,4 @@ COPY backend/usage_keys.json public/usage_keys.json
 EXPOSE 5173
 
 # Start the Vite development server
-CMD ["npm", "run", "dev", "--", "--host"]
+CMD ["serve", "-s", "dist", "-l", "5173"]
