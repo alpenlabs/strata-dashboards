@@ -6,7 +6,8 @@ export type NetworkStatus = {
     bundler_endpoint: string;
 };
 
-const VITE_API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
+const VITE_API_BASE_URL =
+    import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 const fetchStatus = async (): Promise<NetworkStatus> => {
     const response = await fetch(`${VITE_API_BASE_URL}/api/status`);
     if (!response.ok) {

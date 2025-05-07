@@ -9,16 +9,23 @@ interface TimePeriodTabsProps {
     setSelectedPeriod: (period: string) => void; // Update function
 }
 
-const TimePeriodTabs: React.FC<TimePeriodTabsProps> = ({ timePeriods, selectedPeriod, setSelectedPeriod }) => {
+const TimePeriodTabs: React.FC<TimePeriodTabsProps> = ({
+    timePeriods,
+    selectedPeriod,
+    setSelectedPeriod,
+}) => {
     return (
-      <div className="tab-container">
-        {timePeriods.map((period) => (
-            <span key={period} onClick={() => setSelectedPeriod(period)}
-                className={`usage-tab ${selectedPeriod === period ? "usage-tab-active" : ""}`}>
-                {period}
-            </span>
-        ))}
-      </div>
+        <div className="tab-container">
+            {timePeriods.map((period) => (
+                <span
+                    key={period}
+                    onClick={() => setSelectedPeriod(period)}
+                    className={`usage-tab ${selectedPeriod === period ? "usage-tab-active" : ""}`}
+                >
+                    {period}
+                </span>
+            ))}
+        </div>
     );
 };
 
@@ -32,39 +39,53 @@ export default function Usage() {
         select_accounts_by: Record<string, string>;
     };
 
-    async function loadUsageKeys(): Promise<UsageKeys> {
-        const response = await fetch("/usage_keys.json");
-        if (!response.ok) {
-            throw new Error(`Failed to load usage keys: ${response.statusText}`);
-        }
-        return response.json();
-    }
-
     // Usage stats keys
     const [statsNames, setUsageStatNames] = useState<string[]>([]);
     const [timeWindows, setTimeWindows] = useState<string[]>([]);
-    const [selectAccountsBy, setSelectAccountsBy] = useState<{ key: string; value: string }[]>([]);
+    const [selectAccountsBy, setSelectAccountsBy] = useState<
+        { key: string; value: string }[]
+    >([]);
 
     useEffect(() => {
-        loadUsageKeys().then((keys) => {
-            setUsageStatNames(Object.values(keys.usage_stat_names));
-            setTimeWindows(Object.values(keys.time_windows));
-            setSelectAccountsBy(Object.entries(keys.select_accounts_by).map(([key, value]) => ({ key, value })));
-        }).catch(console.error);
-    }, []);
+        async function loadUsageKeys() {
+            try {
+                const response = await fetch("/usage_keys.json");
+                if (!response.ok) {
+                    throw new Error(
+                        `Failed to load usage keys: ${response.statusText}`,
+                    );
+                }
+                const keys: UsageKeys = await response.json();
 
-    const [statPeriods, setStatPeriods] = useState<Record<string, string>>(() => {
-        const defaultStatPeriods: Record<string, string> = {};
-      
-        // Ensure we have both statsNames and timeWindows before initializing
-        if (statsNames.length > 0 && timeWindows.length > 0) {
-            statsNames.forEach((stat) => {
-                defaultStatPeriods[stat] = timeWindows[0]; // Default to first available time window
-            });
+                setUsageStatNames(Object.values(keys.usage_stat_names));
+                setTimeWindows(Object.values(keys.time_windows));
+                setSelectAccountsBy(
+                    Object.entries(keys.select_accounts_by).map(
+                        ([key, value]) => ({ key, value }),
+                    ),
+                );
+            } catch (err) {
+                console.error(err);
+            }
         }
 
-        return defaultStatPeriods;
-    });
+        loadUsageKeys();
+    }, []);
+
+    const [statPeriods, setStatPeriods] = useState<Record<string, string>>(
+        () => {
+            const defaultStatPeriods: Record<string, string> = {};
+
+            // Ensure we have both statsNames and timeWindows before initializing
+            if (statsNames.length > 0 && timeWindows.length > 0) {
+                statsNames.forEach((stat) => {
+                    defaultStatPeriods[stat] = timeWindows[0]; // Default to first available time window
+                });
+            }
+
+            return defaultStatPeriods;
+        },
+    );
 
     // Update `statPeriods` when `statsNames` or `timeWindows` change
     useEffect(() => {
@@ -72,70 +93,109 @@ export default function Usage() {
 
         const defaultStatPeriods: Record<string, string> = {};
         statsNames.forEach((stat) => {
-          defaultStatPeriods[stat] = timeWindows[0]; // Default to first available time period
+            defaultStatPeriods[stat] = timeWindows[0]; // Default to first available time period
         });
 
         setStatPeriods(defaultStatPeriods);
-    }, [statsNames, timeWindows]); // ✅ Runs only when these values change      
+    }, [statsNames, timeWindows]);
 
     return (
-        <div >
+        <div>
             {/* Usage Monitor Page */}
             {pathname === "/usage" && (
-            <div>
-                {! data || error && <p className="error-text">Error loading data</p>}
-                <Suspense fallback={<p className="loading-text">Loading...</p>}>
-                    {isLoading ? (
-                        <p className="loading-text">Loading...</p>
-                    ) : (
-                        <div>
-                            <div className="usage-cards">
-                                {statsNames.map((statName) => (
-                                    <section key={statName} className="usage-section">
-                                        <span className="usage-title">{statName.toUpperCase()}</span>
-                                        <TimePeriodTabs
-                                            timePeriods={timeWindows}
-                                            selectedPeriod={statPeriods[statName]}
-                                            setSelectedPeriod={(period) =>
-                                                setStatPeriods((prev) => ({ ...prev, [statName]: period }))
-                                            }
-                                        />
-                                        <div className="stat-value">
-                                            {data?.stats[statName][statPeriods[statName]] ?? 0}
-                                        </div>
-                                    </section>
-                                ))}
+                <div>
+                    {!data ||
+                        (error && (
+                            <p className="error-text">Error loading data</p>
+                        ))}
+                    <Suspense
+                        fallback={<p className="loading-text">Loading...</p>}
+                    >
+                        {isLoading ? (
+                            <p className="loading-text">Loading...</p>
+                        ) : (
+                            <div>
+                                <div className="usage-cards">
+                                    {statsNames.map((statName) => (
+                                        <section
+                                            key={statName}
+                                            className="usage-section"
+                                        >
+                                            <span className="usage-title">
+                                                {statName.toUpperCase()}
+                                            </span>
+                                            <TimePeriodTabs
+                                                timePeriods={timeWindows}
+                                                selectedPeriod={
+                                                    statPeriods[statName]
+                                                }
+                                                setSelectedPeriod={(period) =>
+                                                    setStatPeriods((prev) => ({
+                                                        ...prev,
+                                                        [statName]: period,
+                                                    }))
+                                                }
+                                            />
+                                            <div className="stat-value">
+                                                {data?.stats[statName][
+                                                    statPeriods[statName]
+                                                ] ?? 0}
+                                            </div>
+                                        </section>
+                                    ))}
+                                </div>
+                                <div className="usage-cards">
+                                    {selectAccountsBy.map(({ key, value }) => {
+                                        const accounts =
+                                            data?.selected_accounts[value] ??
+                                            [];
+                                        return (
+                                            <section
+                                                key={value}
+                                                className="accounts-section"
+                                            >
+                                                <span className="usage-title">
+                                                    {value}
+                                                </span>
+                                                {accounts.length > 0 ? (
+                                                    <ul className="account-list">
+                                                        {accounts.map(
+                                                            (
+                                                                account,
+                                                                index,
+                                                            ) => (
+                                                                <li
+                                                                    key={index}
+                                                                    className="account-item"
+                                                                >
+                                                                    <span className="account-address">
+                                                                        {
+                                                                            account.address
+                                                                        }
+                                                                    </span>
+                                                                    <span className="account-detail">
+                                                                        {key ===
+                                                                        "ACCOUNTS__RECENT"
+                                                                            ? `Deployed: ${new Date(account.creation_timestamp!).toLocaleString()}`
+                                                                            : `Gas Used: ${Number(account.gas_used!).toLocaleString()}`}
+                                                                    </span>
+                                                                </li>
+                                                            ),
+                                                        )}
+                                                    </ul>
+                                                ) : (
+                                                    <p className="no-accounts">
+                                                        No accounts found.
+                                                    </p>
+                                                )}
+                                            </section>
+                                        );
+                                    })}
+                                </div>
                             </div>
-                            <div className="usage-cards">
-                                {selectAccountsBy.map(({ key, value }) => {
-                                const accounts = data?.selected_accounts[value] ?? []
-                                return (
-                                    <section key={value} className="accounts-section">
-                                        <span className="usage-title">{value}</span>
-                                        {accounts.length > 0 ? (
-                                            <ul className="account-list">
-                                                {accounts.map((account, index) => (
-                                                    <li key={index} className="account-item">
-                                                        <span className="account-address">{account.address}</span>
-                                                        <span className="account-detail">
-                                                            {key === "ACCOUNTS__RECENT"
-                                                                ? `Deployed: ${new Date(account.creation_timestamp!).toLocaleString()}`
-                                                                : `Gas Used: ${Number(account.gas_used!).toLocaleString()}`}
-                                                        </span>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        ) : (
-                                            <p className="no-accounts">No accounts found.</p>
-                                        )}
-                                    </section>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    )}
-                </Suspense>
-            </div>
+                        )}
+                    </Suspense>
+                </div>
             )}
         </div>
     );
