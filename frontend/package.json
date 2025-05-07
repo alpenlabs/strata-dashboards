@@ -7,6 +7,7 @@
     "dev": "vite",
     "start": "npm run build && vite",
     "build": "cp ../backend/usage_keys.json ./public/usage_keys.json && tsc -b && vite build",
+    "docker-build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
