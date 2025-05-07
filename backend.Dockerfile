@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM rust as builder
+FROM rust AS builder
 
 # Set the working directory inside the container
 WORKDIR /usr/src/app/backend
