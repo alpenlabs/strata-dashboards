@@ -35,8 +35,8 @@ export type BridgeStatus = {
 const API_BASE_URL =
     import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 const REFETCH_INTERVAL_S =
-    import.meta.env.VITE_BRIDGE_STATUS_REFETCH_INTERVAL_S ||
-    "http://localhost:3000";
+    parseInt(import.meta.env.VITE_BRIDGE_STATUS_REFETCH_INTERVAL_S) || 120;
+
 const fetchStatus = async (): Promise<BridgeStatus> => {
     const response = await fetch(`${API_BASE_URL}/api/bridge_status`);
     if (!response.ok) {
