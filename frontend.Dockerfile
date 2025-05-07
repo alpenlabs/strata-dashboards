@@ -14,6 +14,12 @@ COPY frontend .
 
 COPY backend/usage_keys.json public/usage_keys.json
 
+# Build for production
+RUN npm run build
+
+# Install static server
+RUN npm install -g serve
+
 # Expose the Vite development server port (default is 5173)
 EXPOSE 5173
 
