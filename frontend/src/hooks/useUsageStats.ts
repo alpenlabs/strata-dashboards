@@ -15,7 +15,7 @@ const VITE_API_BASE_URL =
     import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
 const REFETCH_INTERVAL_S =
     parseInt(import.meta.env.VITE_USAGE_STATS_REFETCH_INTERVAL_S) || 120;
-console.log(REFETCH_INTERVAL_S);
+
 const fetchUsageStats = async (): Promise<UsageStats> => {
     const response = await fetch(`${VITE_API_BASE_URL}/api/usage_stats`);
     if (!response.ok) {
