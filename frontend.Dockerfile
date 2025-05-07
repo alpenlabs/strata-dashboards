@@ -1,5 +1,5 @@
 # Use Node.js for development
-FROM node:20
+FROM node:20 AS builder
 
 WORKDIR /app/frontend
 
@@ -15,7 +15,7 @@ COPY frontend .
 COPY backend/usage_keys.json public/usage_keys.json
 
 # Build for production
-RUN npm run build
+RUN npm run docker-build
 
 # Install static server
 RUN npm install -g serve
