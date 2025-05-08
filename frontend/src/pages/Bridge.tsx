@@ -18,7 +18,6 @@ const truncateHex = (hex: string, startLength = 4, endLength = 4) => {
 export default function Bridge() {
     const { pathname } = useLocation(); // Get current URL path
     const { data, isLoading, error } = useBridgeStatus();
-    console.log(data);
 
     return (
         <div className="bridge-content">

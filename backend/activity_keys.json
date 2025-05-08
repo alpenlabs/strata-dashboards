@@ -1,8 +1,8 @@
 {
-    "usage_stat_names": {
-        "USAGE_STATS__USER_OPS": "User ops",
-        "USAGE_STATS__GAS_USED" : "Gas used",
-        "USAGE_STATS__UNIQUE_ACTIVE_ACCOUNTS" : "Unique active accounts"
+    "activity_stat_names": {
+        "ACTIVITY_STATS__USER_OPS": "User ops",
+        "ACTIVITY_STATS__GAS_USED" : "Gas used",
+        "ACTIVITY_STATS__UNIQUE_ACTIVE_ACCOUNTS" : "Unique active accounts"
     },
     "time_windows": {
         "TIME_WINDOW__LAST_24_HOURS": "24h",

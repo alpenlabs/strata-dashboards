@@ -1,11 +1,11 @@
-.usage-cards {
+.activity-cards {
     display: flex;
     flex-direction: row;
     text-align: center;
     gap: 8px;
 }
 
-.usage-section {
+.activity-section {
     justify-content: space-between;
     margin: 0 20px;
     padding: 10px 10px;
@@ -16,20 +16,20 @@
     margin-bottom: 8px;
 }
 
-.usage-title {
+.activity-title {
     margin: 0 1rem;
     color: black;
     font-weight: bold;
 }
 
-.usage-tab {
+.activity-tab {
     cursor: pointer;
     padding: 10px 10px;
     color: black;
     background-color: transparent;
 }
 
-.usage-tab-active {
+.activity-tab-active {
     text-decoration: underline;
 }
 
@@ -73,12 +73,12 @@
 }
 
 @media screen and (max-width: 768px) {
-    .usage-cards {
+    .activity-cards {
         flex-wrap: wrap;
         justify-content: center;
     }
 
-    .usage-section {
+    .activity-section {
         flex: 1 1 100%;
         width: 100%;
         box-sizing: border-box;

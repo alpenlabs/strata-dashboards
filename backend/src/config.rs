@@ -1,7 +1,7 @@
 use dotenvy::dotenv;
 use tracing::info;
 
-use crate::usage::UsageStatsKeys;
+use crate::activity::ActivityStatsKeys;
 
 #[derive(Debug, Clone)]
 pub(crate) struct NetworkConfig {
@@ -107,15 +107,15 @@ impl NetworkConfig {
     }
 }
 
-pub(crate) struct UsageMonitoringConfig {
+pub(crate) struct ActivityMonitoringConfig {
     user_ops_query_url: String,
     accounts_query_url: String,
     stats_refetch_interval_s: u64,
     query_page_size: u64,
-    usage_stats_keys: UsageStatsKeys,
+    activity_stats_keys: ActivityStatsKeys,
 }
 
-impl UsageMonitoringConfig {
+impl ActivityMonitoringConfig {
     pub fn new() -> Self {
         dotenv().ok(); // Load `.env` file if present
 
@@ -127,31 +127,31 @@ impl UsageMonitoringConfig {
             "http://localhost/api/v2/proxy/account-abstraction/accounts".to_string()
         });
 
-        let stats_refetch_interval_s: u64 = std::env::var("USAGE_STATS_REFETCH_INTERVAL_S")
+        let stats_refetch_interval_s: u64 = std::env::var("ACTIVITY_STATS_REFETCH_INTERVAL_S")
             .unwrap_or("120".to_string())
             .parse()
-            .expect("to parse USAGE_STATS_REFETCH_INTERVAL_S as u64");
+            .expect("to parse ACTIVITY_STATS_REFETCH_INTERVAL_S as u64");
 
-        let query_page_size: u64 = std::env::var("USAGE_QUERY_PAGE_SIZE")
+        let query_page_size: u64 = std::env::var("ACTIVITY_QUERY_PAGE_SIZE")
             .unwrap_or("100".to_string())
             .parse()
-            .expect("to parse USAGE_QUERY_PAGE_SIZE as u64");
+            .expect("to parse ACTIVITY_QUERY_PAGE_SIZE as u64");
 
-        let usage_stats_keys = UsageMonitoringConfig::load_usage_keys();
+        let activity_stats_keys = ActivityMonitoringConfig::load_activity_keys();
 
-        UsageMonitoringConfig {
+        ActivityMonitoringConfig {
             user_ops_query_url,
             accounts_query_url,
             stats_refetch_interval_s,
             query_page_size,
-            usage_stats_keys,
+            activity_stats_keys,
         }
     }
 
-    /// Read keys used in reporting usages from a json file.
-    fn load_usage_keys() -> UsageStatsKeys {
+    /// Read keys used in reporting activities from a json file.
+    fn load_activity_keys() -> ActivityStatsKeys {
         // Path relative to backend
-        let data = std::fs::read_to_string("usage_keys.json").expect("Unable to read file");
+        let data = std::fs::read_to_string("activity_keys.json").expect("Unable to read file");
         serde_json::from_str(&data).expect("JSON parsing failed")
     }
 
@@ -175,9 +175,9 @@ impl UsageMonitoringConfig {
         self.query_page_size
     }
 
-    /// Getter for `usage_stats_keys`
-    pub fn usage_stats_keys(&self) -> &UsageStatsKeys {
-        &self.usage_stats_keys
+    /// Getter for `activity_stats_keys`
+    pub fn activity_stats_keys(&self) -> &ActivityStatsKeys {
+        &self.activity_stats_keys
     }
 }
 

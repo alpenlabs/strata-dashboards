@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useConfig } from "./useConfig";
 
 export type OperatorStatus = {
     operator_id: string;
@@ -32,13 +33,8 @@ export type BridgeStatus = {
     reimbursements: ReimbursementInfo[];
 };
 
-const API_BASE_URL =
-    import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
-const REFETCH_INTERVAL_S =
-    parseInt(import.meta.env.VITE_BRIDGE_STATUS_REFETCH_INTERVAL_S) || 120;
-
-const fetchStatus = async (): Promise<BridgeStatus> => {
-    const response = await fetch(`${API_BASE_URL}/api/bridge_status`);
+const fetchStatus = async (baseUrl: string): Promise<BridgeStatus> => {
+    const response = await fetch(`${baseUrl}/api/bridge_status`);
     if (!response.ok) {
         throw new Error("Failed to fetch status");
     }
@@ -46,9 +42,11 @@ const fetchStatus = async (): Promise<BridgeStatus> => {
 };
 
 export const useBridgeStatus = () => {
+    const { apiBaseUrl, bridgeStatusRefetchIntervalS } = useConfig();
+
     return useQuery({
         queryKey: ["bridgeStatus"],
-        queryFn: fetchStatus,
-        refetchInterval: REFETCH_INTERVAL_S * 1000,
+        queryFn: () => fetchStatus(apiBaseUrl),
+        refetchInterval: bridgeStatusRefetchIntervalS * 1000, // convert to ms
     });
 };

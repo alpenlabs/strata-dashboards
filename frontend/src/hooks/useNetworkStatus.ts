@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useConfig } from "./useConfig";
 
 export type NetworkStatus = {
     batch_producer: string;
@@ -6,10 +7,8 @@ export type NetworkStatus = {
     bundler_endpoint: string;
 };
 
-const VITE_API_BASE_URL =
-    import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
-const fetchStatus = async (): Promise<NetworkStatus> => {
-    const response = await fetch(`${VITE_API_BASE_URL}/api/status`);
+const fetchNetworkStatus = async (baseUrl: string): Promise<NetworkStatus> => {
+    const response = await fetch(`${baseUrl}/api/status`);
     if (!response.ok) {
         throw new Error("Failed to fetch status");
     }
@@ -17,9 +16,11 @@ const fetchStatus = async (): Promise<NetworkStatus> => {
 };
 
 export const useNetworkStatus = () => {
+    const { apiBaseUrl, networkStatusRefetchIntervalS } = useConfig();
+
     return useQuery({
         queryKey: ["networkStatus"],
-        queryFn: fetchStatus,
-        refetchInterval: 10000, // ✅ Auto-refetch every 30s
+        queryFn: () => fetchNetworkStatus(apiBaseUrl),
+        refetchInterval: networkStatusRefetchIntervalS * 1000, // convert to ms
     });
 };
