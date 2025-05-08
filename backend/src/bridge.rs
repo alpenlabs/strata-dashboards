@@ -170,7 +170,7 @@ pub struct BridgeStatus {
     reimbursements: Vec<ReimbursementInfo>,
 }
 
-/// Shared usage stats
+/// Shared bridge state
 pub type SharedBridgeState = Arc<RwLock<BridgeStatus>>;
 
 /// Periodically fetch bridge status and update shared bridge state

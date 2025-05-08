@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useConfig } from "./useConfig";
 
 export type Wallet = {
     address: string;
@@ -10,14 +11,13 @@ export type PaymasterWallets = {
     validating: Wallet;
 };
 
-const VITE_API_BASE_URL =
-    import.meta.env.VITE_API_BASE_URL || "http://localhost:3000";
-
 /**
  * Fetches Paymaster Wallets from API
  */
-const fetchPaymasterWallets = async (): Promise<PaymasterWallets> => {
-    const response = await fetch(`${VITE_API_BASE_URL}/api/balances`);
+const fetchPaymasterWallets = async (
+    baseUrl: string,
+): Promise<PaymasterWallets> => {
+    const response = await fetch(`${baseUrl}/api/balances`);
     if (!response.ok) {
         throw new Error("Failed to fetch paymaster wallets");
     }
@@ -29,9 +29,10 @@ const fetchPaymasterWallets = async (): Promise<PaymasterWallets> => {
  * React Query hook to fetch Paymaster Wallets
  */
 export const usePaymasterWallets = () => {
+    const { apiBaseUrl, networkStatusRefetchIntervalS } = useConfig();
     return useQuery({
         queryKey: ["paymasterWallets"],
-        queryFn: fetchPaymasterWallets,
-        refetchInterval: 10000, // Auto-refresh every 30s
+        queryFn: () => fetchPaymasterWallets(apiBaseUrl),
+        refetchInterval: networkStatusRefetchIntervalS * 1000, // convert to ms
     });
 };

@@ -11,17 +11,17 @@ use std::{
 use tokio::{sync::RwLock, time::interval};
 use tracing::{error, info};
 
-use crate::config::UsageMonitoringConfig;
+use crate::config::ActivityMonitoringConfig;
 
-/// Enum for usage statistics
+/// Enum for activity statistics
 #[derive(Debug, Eq, PartialEq, Hash, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-enum UsageStatName {
-    #[serde(rename = "USAGE_STATS__USER_OPS")]
+enum ActivityStatName {
+    #[serde(rename = "ACTIVITY_STATS__USER_OPS")]
     UserOps,
-    #[serde(rename = "USAGE_STATS__GAS_USED")]
+    #[serde(rename = "ACTIVITY_STATS__GAS_USED")]
     GasUsed,
-    #[serde(rename = "USAGE_STATS__UNIQUE_ACTIVE_ACCOUNTS")]
+    #[serde(rename = "ACTIVITY_STATS__UNIQUE_ACTIVE_ACCOUNTS")]
     UniqueActiveAccounts,
 }
 
@@ -61,8 +61,8 @@ enum SelectAccountsBy {
 
 /// Struct for holding parsed JSON
 #[derive(Debug, PartialEq, Deserialize)]
-pub(crate) struct UsageStatsKeys {
-    usage_stat_names: HashMap<UsageStatName, String>,
+pub(crate) struct ActivityStatsKeys {
+    activity_stat_names: HashMap<ActivityStatName, String>,
     time_windows: HashMap<TimeWindow, String>,
     select_accounts_by: HashMap<SelectAccountsBy, String>,
 }
@@ -102,26 +102,26 @@ struct AccountsResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct UsageStats {
-    /// Usage stats:
-    /// First level key is the name of stat. See USAGE_STATS in `usage_keys.json`.
-    /// Second level key is time period. See TIME_WINDOWS in `usage_keys.json`.
+pub struct ActivityStats {
+    /// Activity stats:
+    /// First level key is the name of stat. See USAGE_STATS in `activity_keys.json`.
+    /// Second level key is time period. See TIME_WINDOWS in `activity_keys.json`.
     stats: HashMap<String, HashMap<String, u64>>,
 
     /// Selected accounts: e.g. recently deployed, top gas consumers
-    /// First level key is the name of stat. See SELECTED_ACCOUNTS in `usage_keys.json`.
+    /// First level key is the name of stat. See SELECTED_ACCOUNTS in `activity_keys.json`.
     selected_accounts: HashMap<String, Vec<Account>>,
 }
 
-impl UsageStats {
-    pub fn default(config: &UsageMonitoringConfig) -> UsageStats {
+impl ActivityStats {
+    pub fn default(config: &ActivityMonitoringConfig) -> ActivityStats {
         let stats: HashMap<String, HashMap<String, u64>> = config
-            .usage_stats_keys()
-            .usage_stat_names
+            .activity_stats_keys()
+            .activity_stat_names
             .values()
             .map(|stat_name| {
                 let inner: HashMap<String, u64> = config
-                    .usage_stats_keys()
+                    .activity_stats_keys()
                     .time_windows
                     .values()
                     .map(|window| (window.clone(), 0u64))
@@ -131,27 +131,30 @@ impl UsageStats {
             .collect();
 
         let selected_accounts: HashMap<_, Vec<Account>> = config
-            .usage_stats_keys()
+            .activity_stats_keys()
             .select_accounts_by
             .values()
             .map(|key| (key.to_owned(), Vec::new()))
             .collect();
 
-        UsageStats {
+        ActivityStats {
             stats,
             selected_accounts,
         }
     }
 }
 
-/// Shared usage stats
-pub type SharedUsageStats = Arc<RwLock<UsageStats>>;
+/// Shared activity stats
+pub type SharedActivityStats = Arc<RwLock<ActivityStats>>;
 
 type UniqueAccounts = HashMap<String, HashSet<String>>;
 type AccountsGasUsage = HashMap<String, u64>;
 
-/// Periodically fetch user operations and accounts and compute usage stats
-pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &UsageMonitoringConfig) {
+/// Periodically fetch user operations and accounts and compute activity stats
+pub async fn activity_monitoring_task(
+    shared_stats: SharedActivityStats,
+    config: &ActivityMonitoringConfig,
+) {
     let mut interval = interval(tokio::time::Duration::from_secs(
         config.stats_refetch_interval(),
     ));
@@ -160,7 +163,7 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
         interval.tick().await;
         let http_client = reqwest::Client::new();
 
-        info!("Refresing usage stats...");
+        info!("Refresing activity stats...");
         let now = Utc::now();
 
         // Determine the start_time for stats
@@ -175,7 +178,7 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
         let mut gas_usage: AccountsGasUsage = HashMap::new();
 
         let time_windows: Vec<(String, Duration)> = config
-            .usage_stats_keys()
+            .activity_stats_keys()
             .time_windows
             .iter()
             .map(|(tw, tw_value)| (tw_value.clone(), tw.to_duration(now)))
@@ -183,7 +186,7 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
 
         // Initialize or reset stats
         for (period, _) in &time_windows {
-            for stat_name in config.usage_stats_keys().usage_stat_names.values() {
+            for stat_name in config.activity_stats_keys().activity_stat_names.values() {
                 locked_stats
                     .stats
                     .entry(stat_name.clone())
@@ -221,11 +224,11 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
                             for (period, duration) in &time_windows {
                                 if now - *duration <= op_time {
                                     for (stat_key, stat_name) in
-                                        &config.usage_stats_keys().usage_stat_names
+                                        &config.activity_stats_keys().activity_stat_names
                                     {
                                         if matches!(
                                             stat_key,
-                                            UsageStatName::UserOps | UsageStatName::GasUsed
+                                            ActivityStatName::UserOps | ActivityStatName::GasUsed
                                         ) {
                                             *locked_stats
                                                 .stats
@@ -265,8 +268,8 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
             locked_stats
                 .stats
                 .entry(
-                    config.usage_stats_keys().usage_stat_names
-                        [&UsageStatName::UniqueActiveAccounts]
+                    config.activity_stats_keys().activity_stat_names
+                        [&ActivityStatName::UniqueActiveAccounts]
                         .clone(),
                 ) // Use enum variant
                 .or_default()
@@ -310,7 +313,7 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
                     let recent_accounts = sorted_accounts.into_iter().take(5).collect::<Vec<_>>();
                     // Store in shared stats
                     locked_stats.selected_accounts.insert(
-                        config.usage_stats_keys().select_accounts_by[&SelectAccountsBy::Recent]
+                        config.activity_stats_keys().select_accounts_by[&SelectAccountsBy::Recent]
                             .clone(),
                         recent_accounts,
                     );
@@ -342,7 +345,7 @@ pub async fn usage_monitoring_task(shared_stats: SharedUsageStats, config: &Usag
 
         // Store in shared stats
         locked_stats.selected_accounts.insert(
-            config.usage_stats_keys().select_accounts_by[&SelectAccountsBy::TopGasConsumers24h]
+            config.activity_stats_keys().select_accounts_by[&SelectAccountsBy::TopGasConsumers24h]
                 .clone(),
             top_gas_consumers,
         );
@@ -386,7 +389,7 @@ where
     }
 }
 
-async fn fetch_usage_common(
+async fn fetch_activity_common(
     http_client: &reqwest::Client,
     query_url: &str,
     start_time: DateTime<Utc>,
@@ -434,7 +437,7 @@ async fn fetch_user_ops(
 ) -> Result<UserOpsResponse, anyhow::Error> {
     info!("Fetching user operations");
 
-    let data = fetch_usage_common(
+    let data = fetch_activity_common(
         http_client,
         query_url,
         start_time,
@@ -473,7 +476,7 @@ async fn fetch_accounts(
 ) -> Result<AccountsResponse, anyhow::Error> {
     info!("Fetching accounts");
 
-    let data = fetch_usage_common(
+    let data = fetch_activity_common(
         http_client,
         query_url,
         start_time,
@@ -504,16 +507,16 @@ async fn fetch_accounts(
     })
 }
 
-pub async fn get_usage_stats(state: SharedUsageStats) -> Json<UsageStats> {
+pub async fn get_activity_stats(state: SharedActivityStats) -> Json<ActivityStats> {
     let data = state.read().await.clone();
     Json(data)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::usage::{
-        convert_to_u64, fetch_accounts, fetch_user_ops, get_address_hash, TimeWindow,
-        UsageMonitoringConfig, UsageStats,
+    use crate::activity::{
+        convert_to_u64, fetch_accounts, fetch_user_ops, get_address_hash, ActivityMonitoringConfig,
+        ActivityStats, TimeWindow,
     };
     use chrono::{Datelike, TimeZone, Utc};
     use mockito::{Matcher, Server};
@@ -542,13 +545,13 @@ mod tests {
     }
 
     #[test]
-    fn test_usage_stats_default() {
-        let config = UsageMonitoringConfig::new();
-        let stats = UsageStats::default(&config);
+    fn test_activity_stats_default() {
+        let config = ActivityMonitoringConfig::new();
+        let stats = ActivityStats::default(&config);
 
-        for stat_name in config.usage_stats_keys().usage_stat_names.values() {
+        for stat_name in config.activity_stats_keys().activity_stat_names.values() {
             let inner = stats.stats.get(stat_name).expect("Missing stat name key");
-            for time_window in config.usage_stats_keys().time_windows.values() {
+            for time_window in config.activity_stats_keys().time_windows.values() {
                 assert_eq!(
                     inner.get(time_window),
                     Some(&0),
@@ -559,7 +562,7 @@ mod tests {
             }
         }
 
-        for select_by in config.usage_stats_keys().select_accounts_by.values() {
+        for select_by in config.activity_stats_keys().select_accounts_by.values() {
             let accounts = stats
                 .selected_accounts
                 .get(select_by)

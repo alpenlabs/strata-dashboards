@@ -1,7 +1,7 @@
+mod activity;
 mod bridge;
 mod config;
 mod retry_policy;
-mod usage;
 mod utils;
 mod wallets;
 
@@ -20,10 +20,10 @@ use tower_http::cors::{Any, CorsLayer};
 use tracing::{error, info};
 
 use crate::{
+    activity::{activity_monitoring_task, get_activity_stats, ActivityStats},
     bridge::{bridge_monitoring_task, get_bridge_status, SharedBridgeState},
-    config::{BridgeMonitoringConfig, NetworkConfig, UsageMonitoringConfig},
+    config::{ActivityMonitoringConfig, BridgeMonitoringConfig, NetworkConfig},
     retry_policy::ExponentialBackoff,
-    usage::{get_usage_stats, usage_monitoring_task, UsageStats},
     utils::create_rpc_client,
     wallets::{
         fetch_balances_task, get_wallets_with_balances, init_paymaster_wallets, SharedWallets,
@@ -168,15 +168,15 @@ async fn main() {
         }
     });
 
-    // Usage monitoring
-    let usage_monitoring_config = UsageMonitoringConfig::new();
-    let usage_stats = UsageStats::default(&usage_monitoring_config);
-    // Shared state for usage stats
-    let shared_usage_stats = Arc::new(RwLock::new(usage_stats));
+    // Activity monitoring
+    let activity_monitoring_config = ActivityMonitoringConfig::new();
+    let activity_stats = ActivityStats::default(&activity_monitoring_config);
+    // Shared state for activity stats
+    let shared_activity_stats = Arc::new(RwLock::new(activity_stats));
     tokio::spawn({
-        let usage_stats_clone = Arc::clone(&shared_usage_stats);
+        let activity_stats_clone = Arc::clone(&shared_activity_stats);
         async move {
-            usage_monitoring_task(usage_stats_clone, &usage_monitoring_config).await;
+            activity_monitoring_task(activity_stats_clone, &activity_monitoring_config).await;
         }
     });
 
@@ -205,8 +205,8 @@ async fn main() {
             get(move || get_bridge_status(Arc::clone(&bridge_state))),
         )
         .route(
-            "/api/usage_stats",
-            get(move || get_usage_stats(Arc::clone(&shared_usage_stats))),
+            "/api/activity_stats",
+            get(move || get_activity_stats(Arc::clone(&shared_activity_stats))),
         )
         .layer(cors);
 

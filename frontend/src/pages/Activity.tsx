@@ -1,7 +1,7 @@
 import { Suspense, useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { useUsageStats } from "../hooks/useUsageStats.ts";
-import "../styles/usage.css";
+import { useActivityStats } from "../hooks/useActivityStats.ts";
+import "../styles/activity.css";
 
 interface TimePeriodTabsProps {
     timePeriods: string[];
@@ -20,7 +20,7 @@ const TimePeriodTabs: React.FC<TimePeriodTabsProps> = ({
                 <span
                     key={period}
                     onClick={() => setSelectedPeriod(period)}
-                    className={`usage-tab ${selectedPeriod === period ? "usage-tab-active" : ""}`}
+                    className={`activity-tab ${selectedPeriod === period ? "activity-tab-active" : ""}`}
                 >
                     {period}
                 </span>
@@ -29,35 +29,35 @@ const TimePeriodTabs: React.FC<TimePeriodTabsProps> = ({
     );
 };
 
-export default function Usage() {
+export default function Activity() {
     const { pathname } = useLocation(); // Get current URL path
-    const { data, isLoading, error } = useUsageStats();
+    const { data, isLoading, error } = useActivityStats();
 
-    type UsageKeys = {
-        usage_stat_names: Record<string, string>;
+    type ActivityKeys = {
+        activity_stat_names: Record<string, string>;
         time_windows: Record<string, string>;
         select_accounts_by: Record<string, string>;
     };
 
-    // Usage stats keys
-    const [statsNames, setUsageStatNames] = useState<string[]>([]);
+    // Activity stats keys
+    const [statsNames, setActivityStatNames] = useState<string[]>([]);
     const [timeWindows, setTimeWindows] = useState<string[]>([]);
     const [selectAccountsBy, setSelectAccountsBy] = useState<
         { key: string; value: string }[]
     >([]);
 
     useEffect(() => {
-        async function loadUsageKeys() {
+        async function loadActivityKeys() {
             try {
-                const response = await fetch("/usage_keys.json");
+                const response = await fetch("/activity_keys.json");
                 if (!response.ok) {
                     throw new Error(
-                        `Failed to load usage keys: ${response.statusText}`,
+                        `Failed to load activity keys: ${response.statusText}`,
                     );
                 }
-                const keys: UsageKeys = await response.json();
+                const keys: ActivityKeys = await response.json();
 
-                setUsageStatNames(Object.values(keys.usage_stat_names));
+                setActivityStatNames(Object.values(keys.activity_stat_names));
                 setTimeWindows(Object.values(keys.time_windows));
                 setSelectAccountsBy(
                     Object.entries(keys.select_accounts_by).map(
@@ -69,7 +69,7 @@ export default function Usage() {
             }
         }
 
-        loadUsageKeys();
+        loadActivityKeys();
     }, []);
 
     const [statPeriods, setStatPeriods] = useState<Record<string, string>>(
@@ -101,8 +101,8 @@ export default function Usage() {
 
     return (
         <div>
-            {/* Usage Monitor Page */}
-            {pathname === "/usage" && (
+            {/* Activity Monitor Page */}
+            {pathname === "/activity" && (
                 <div>
                     {!data ||
                         (error && (
@@ -115,13 +115,13 @@ export default function Usage() {
                             <p className="loading-text">Loading...</p>
                         ) : (
                             <div>
-                                <div className="usage-cards">
+                                <div className="activity-cards">
                                     {statsNames.map((statName) => (
                                         <section
                                             key={statName}
-                                            className="usage-section"
+                                            className="activity-section"
                                         >
-                                            <span className="usage-title">
+                                            <span className="activity-title">
                                                 {statName.toUpperCase()}
                                             </span>
                                             <TimePeriodTabs
@@ -144,7 +144,7 @@ export default function Usage() {
                                         </section>
                                     ))}
                                 </div>
-                                <div className="usage-cards">
+                                <div className="activity-cards">
                                     {selectAccountsBy.map(({ key, value }) => {
                                         const accounts =
                                             data?.selected_accounts[value] ??
@@ -154,7 +154,7 @@ export default function Usage() {
                                                 key={value}
                                                 className="accounts-section"
                                             >
-                                                <span className="usage-title">
+                                                <span className="activity-title">
                                                     {value}
                                                 </span>
                                                 {accounts.length > 0 ? (

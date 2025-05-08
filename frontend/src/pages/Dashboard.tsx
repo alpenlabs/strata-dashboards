@@ -8,7 +8,7 @@ import "../styles/network.css";
 const StatusCard = lazy(() => import("../components/StatusCard"));
 const BalanceCard = lazy(() => import("../components/BalanceCard"));
 const Bridge = lazy(() => import("./Bridge"));
-const Usage = lazy(() => import("./Usage"));
+const Activity = lazy(() => import("./Activity"));
 
 export default function Dashboard() {
     const [isMenuOpen, setMenuOpen] = useState(false);
@@ -67,8 +67,8 @@ export default function Dashboard() {
                         Bridge
                     </Link>
                     <Link
-                        to="/usage"
-                        className={`menu-item ${pathname === "/usage" ? "active" : ""}`}
+                        to="/activity"
+                        className={`menu-item ${pathname === "/activity" ? "active" : ""}`}
                         onClick={() => setMenuOpen(false)}
                     >
                         Activity
@@ -176,8 +176,8 @@ export default function Dashboard() {
                     </div>
                 )}
 
-                {/* Usage Page Content */}
-                {pathname === "/usage" && <Usage></Usage>}
+                {/* Activity Page Content */}
+                {pathname === "/activity" && <Activity></Activity>}
             </div>
         </div>
     );

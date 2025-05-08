@@ -18,11 +18,9 @@ services:
       STRATA_RPC_URL: http://mock_rpc:8545
       STRATA_BRIDGE_RPC_URL: http://mock_rpc:8546
       BUNDLER_URL: https://bundler.testnet.alpenlabs.io/health
-      # TODO: Update the following two urls after strata blockscout service includes
-      #       updated user-ops-indexer supporting timestamp-based filtering
       USER_OPS_QUERY_URL: https://explorer.testnet.alpenlabs.io/api/v2/proxy/account-abstraction/operations
       ACCOUNTS_QUERY_URL: https://explorer.testnet.alpenlabs.io/api/v2/proxy/account-abstraction/accounts
-      USAGE_STATS_REFETCH_INTERVAL_S: 120
+      ACTIVITY_STATS_REFETCH_INTERVAL_S: 120
     ports:
       - "3000:3000"
 
@@ -35,6 +33,3 @@ services:
       - backend
     ports:
       - "5173:5173"
-    environment:
-      VITE_API_BASE_URL: http://localhost:3000
-      VITE_USAGE_STATS_REFETCH_INTERVAL_S: 60
